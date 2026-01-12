@@ -1,0 +1,21 @@
+# Ignore all log files
+*.log
+
+# Ignore a specific file named 'config.local.json'
+config.local.json
+
+# Ignore the entire 'temp' directory
+temp/
+.venv/
+.idea/
+agent**_data.json
+# Ignore build artifacts in any 'build' directory
+**/build/
+**.iml
+**.pyc
+
+# Ignore files specific to macOS
+.DS_Store
+
+# Ignore files specific to Windows
+Thumbs.db
