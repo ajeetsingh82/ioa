@@ -21,7 +21,12 @@ async def send_to_student(ctx: Context):
 @gateway.on_message(model=Query)
 async def display_reply(ctx: Context, sender: str, msg: Query):
     # This only triggers when the Student sends a message BACK to the gateway
-    print(f"\n[RESPONSE] {msg.text}")
+    # We can use the sender address to identify who sent it, but in this architecture
+    # the Student always relays the message.
+    
+    # To make it clearer, we can check if the message content starts with a known prefix
+    # or just print it as is.
+    print(f"\n[RESPONSE from {sender[-8:]}]: {msg.text}")
     print(">> ", end="", flush=True)
 
 def console():
