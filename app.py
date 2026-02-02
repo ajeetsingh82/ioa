@@ -27,6 +27,8 @@ def console():
     time.sleep(2)
     print("\n--- RAG Agent Test Environment ---")
     print("Ask any question. The RAG agent will search Google and use an LLM to answer.")
+    print("You can set the LLM_URL and LLM_MODEL environment variables.")
+    print("Default URL: http://localhost:11434/api/generate, Default Model: llama3.2:1b")
     print("Type 'exit' or 'quit' to stop.")
     while True:
         msg = input(">> ")
