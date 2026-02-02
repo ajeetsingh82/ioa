@@ -1,11 +1,15 @@
 import requests
+import os
 from uagents import Agent, Context
 from .models import Query
 from .google_search import search_web
 
+# Get LLM configuration from environment variables
+LLM_URL = os.getenv("LLM_URL", "http://localhost:11434/api/generate")
+LLM_MODEL = os.getenv("LLM_MODEL", "llama3.2:1b")
+
 def think(context: str, goal: str) -> str:
     """A simplified 'brain' for the RAG agent, calling the LLM."""
-    url = "http://localhost:11434/api/generate"
     prompt = f"""### CONTEXT:
 {context}
 
@@ -19,7 +23,8 @@ def think(context: str, goal: str) -> str:
 
 ### RESPONSE:"""
     try:
-        r = requests.post(url, json={"model": "llama3.2:1b", "prompt": prompt, "stream": False}, timeout=30)
+        r = requests.post(LLM_URL, json={"model": LLM_MODEL, "prompt": prompt, "stream": False}, timeout=30)
+        r.raise_for_status()
         return r.json().get('response', "").strip()
     except requests.exceptions.RequestException as e:
         return f"LLM is offline or encountered an error: {e}"

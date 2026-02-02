@@ -1,4 +1,6 @@
-from ddgs import DDGS # Updated import to use the new library
+from ddgs import DDGS
+import contextlib
+import os
 
 def search_web(query: str, max_results: int = 1) -> str:
     """
@@ -8,16 +10,16 @@ def search_web(query: str, max_results: int = 1) -> str:
     print(f"[Web Search] Searching for: '{query}'")
     
     try:
-        # DDGS().text() returns a list of dictionaries, each containing
-        # the title, href, and body (content) of a search result.
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
+        # Suppress the noisy output from the ddgs library
+        with open(os.devnull, 'w') as devnull:
+            with contextlib.redirect_stdout(devnull), contextlib.redirect_stderr(devnull):
+                with DDGS() as ddgs:
+                    results = list(ddgs.text(query, max_results=max_results))
         
         if not results:
             print("[Web Search] No results found.")
             return "No relevant information found from the web search."
             
-        # We only need the content of the first result for our RAG agent.
         first_result_content = results[0].get('body', '')
         
         if not first_result_content:
@@ -26,7 +28,6 @@ def search_web(query: str, max_results: int = 1) -> str:
             
         print(f"[Web Search] Retrieved content from: {results[0].get('href', 'Unknown URL')}")
         
-        # The text is already reasonably clean, but we'll limit its length.
         return first_result_content[:3000]
 
     except Exception as e:
