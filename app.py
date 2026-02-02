@@ -1,50 +1,46 @@
 import threading, queue, time, os
 from uagents import Agent, Context, Bureau
 from src.models import Query
-from src.student_agent import student
-from src.teacher_agent import teacher
-import src.student_agent as student_module
+from src.rag_agent import rag_agent
 
-# The 'gateway' is the agent representing YOU (the user)
-gateway = Agent(name="gateway", port=8002, seed="gateway_seed")
+# This agent represents the user interface
+user_agent = Agent(name="user_agent", port=8002, seed="user_agent_seed")
 user_input_queue = queue.Queue()
 
-@gateway.on_interval(period=1.0)
-async def send_to_student(ctx: Context):
+@user_agent.on_interval(period=1.0)
+async def send_query_to_rag(ctx: Context):
+    """Checks for user input and sends it to the RAG agent."""
     try:
-        msg = user_input_queue.get_nowait()
-        # Gateway sends to Student
-        await ctx.send(student.address, Query(text=msg))
+        query_text = user_input_queue.get_nowait()
+        await ctx.send(rag_agent.address, Query(text=query_text))
     except queue.Empty:
         pass
 
-@gateway.on_message(model=Query)
-async def display_reply(ctx: Context, sender: str, msg: Query):
-    # This only triggers when the Student sends a message BACK to the gateway
-    # We can use the sender address to identify who sent it, but in this architecture
-    # the Student always relays the message.
-    
-    # To make it clearer, we can check if the message content starts with a known prefix
-    # or just print it as is.
-    print(f"\n[RESPONSE from {sender[-8:]}]: {msg.text}")
+@user_agent.on_message(model=Query)
+async def display_response(ctx: Context, sender: str, msg: Query):
+    """Receives the final answer from the RAG agent and displays it."""
+    print(f"\n[RAG Response]: {msg.text}")
     print(">> ", end="", flush=True)
 
 def console():
-    time.sleep(3)
-    print("\n--- DISTRIBUTED SYSTEM READY ---")
+    """A simple console loop to capture user input."""
+    time.sleep(2)
+    print("\n--- RAG Agent Test Environment ---")
+    print("Ask any question. The RAG agent will search Google and use an LLM to answer.")
+    print("Type 'exit' or 'quit' to stop.")
     while True:
         msg = input(">> ")
-        if msg.lower() in ['exit', 'quit']: os._exit(0)
+        if msg.lower() in ['exit', 'quit']:
+            os._exit(0)
         user_input_queue.put(msg)
 
 if __name__ == "__main__":
-    # Crucial: Link the student to the teacher before starting
-    student_module.TEACHER_ADDRESS = teacher.address
+    bureau = Bureau()
+    bureau.add(rag_agent)
+    bureau.add(user_agent)
 
-    bureau = Bureau(port=8000)
-    bureau.add(teacher)
-    bureau.add(student)
-    bureau.add(gateway) # Add the gateway to the bureau
-
+    # Start the console input thread
     threading.Thread(target=console, daemon=True).start()
+    
+    # Run the agent bureau
     bureau.run()
