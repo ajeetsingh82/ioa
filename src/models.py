@@ -15,8 +15,8 @@ class UserQuery(Model):
 # The message from the orchestrator to the workers
 class MissionBrief(Model):
     request_id: str
-    sub_task: str
-    labels: List[str]
+    query: str
+    label: Optional[str] = None # Each worker gets one specific label, or none
     orchestrator_address: str
 
 # The message from a worker to the orchestrator upon completion

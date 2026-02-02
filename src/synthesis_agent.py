@@ -29,10 +29,22 @@ def create_synthesis_agent(orchestrator_address: str):
 
         # 1. Targeted Retrieval: Query the shared memory for relevant buckets.
         context = ""
+        retrieved_namespaces = set() # Keep track of namespaces to clean up
+
+        # Retrieve content for each specific label
         for label in msg.labels:
-            retrieved_data = shared_memory.get(f"{msg.request_id}:{label}")
+            key = f"{msg.request_id}:{label}"
+            retrieved_data = shared_memory.get(key)
             if retrieved_data:
                 context += f"--- Content for label '{label}' ---\n{retrieved_data}\n\n"
+                retrieved_namespaces.add(label)
+        
+        # Also retrieve content from the 'general' namespace (for missions without a specific label)
+        general_key = f"{msg.request_id}:general"
+        general_data = shared_memory.get(general_key)
+        if general_data:
+            context += f"--- General Context ---\n{general_data}\n\n"
+            retrieved_namespaces.add("general")
         
         if not context:
             final_answer = "Could not retrieve any relevant information from the workers."
@@ -45,8 +57,8 @@ def create_synthesis_agent(orchestrator_address: str):
         ctx.logger.info("Synthesis complete. Final answer sent to user agent.")
 
         # 4. Ephemeral State: Clean up the shared memory for this request.
-        for label in msg.labels:
-            shared_memory.delete(f"{msg.request_id}:{label}")
+        for namespace in retrieved_namespaces:
+            shared_memory.delete(f"{msg.request_id}:{namespace}")
         ctx.logger.info(f"Cleaned up shared memory for request_id: {msg.request_id}")
     
     return agent

@@ -4,9 +4,8 @@ from uagents import Agent, Context
 from .models import MissionBrief, WorkerCompletion, AgentRegistration
 from .google_search import search_web
 from .shared_memory import shared_memory
+from .rag_agent import think
 
-# We can run multiple instances of this worker.
-# The seed will be passed in dynamically when creating the agent.
 def create_worker_agent(name: str, seed: str, orchestrator_address: str):
     agent = Agent(name=name, seed=seed)
 
@@ -19,26 +18,31 @@ def create_worker_agent(name: str, seed: str, orchestrator_address: str):
     @agent.on_message(model=MissionBrief)
     async def handle_mission_brief(ctx: Context, sender: str, msg: MissionBrief):
         """
-        Executes the research mission provided by the orchestrator.
+        Executes the research mission: search, filter, and store relevant information.
         """
-        ctx.logger.info(f"Worker {agent.name} received mission: '{msg.sub_task}' with labels {msg.labels}")
+        ctx.logger.info(f"Worker {agent.name} received mission for query: '{msg.query}' with label: {msg.label}")
 
-        # 1. Autonomous Discovery: Perform web search.
-        query = f"{msg.sub_task} {' '.join(msg.labels)}"
-        retrieved_text = search_web(query, max_results=3)
+        # 1. Autonomous Discovery: Perform web search
+        search_query = f"{msg.query} {msg.label}" if msg.label else msg.query
+        retrieved_text = search_web(search_query, max_results=1)
 
-        # 2. Semantic Filter & Quality Scoring (Simplified)
-        filtered_content = ""
-        if any(label.lower() in retrieved_text.lower() for label in msg.labels):
-            filtered_content = retrieved_text
-            # Store the filtered content in the shared memory, namespaced by labels.
-            for label in msg.labels:
-                shared_memory.set(f"{msg.request_id}:{label}", filtered_content)
-            ctx.logger.info(f"Worker {agent.name} stored content for labels: {msg.labels}")
+        # 2. Semantic Filter: Use LLM to extract only relevant information
+        if msg.label:
+            filter_prompt = f"From the text below, extract only the information directly relevant to the keyword '{msg.label}'. Be concise."
+            filtered_content = think(context=retrieved_text, goal=filter_prompt)
         else:
-            ctx.logger.info(f"Worker {agent.name} found no relevant content for labels.")
+            # For the general query, summarize the content in relation to the original question
+            filter_prompt = f"Summarize the following text in relation to the question '{msg.query}'."
+            filtered_content = think(context=retrieved_text, goal=filter_prompt)
+        
+        ctx.logger.info(f"Worker {agent.name} filtered content. Length: {len(filtered_content)}")
 
-        # 3. Notify Orchestrator of completion.
+        # 3. Write to Memory: Store the filtered content in the shared memory
+        namespace = msg.label if msg.label else "general"
+        shared_memory.set(f"{msg.request_id}:{namespace}", filtered_content)
+        ctx.logger.info(f"Worker {agent.name} stored content for label: {namespace}")
+
+        # 4. Notify Orchestrator of completion
         completion_message = WorkerCompletion(
             request_id=msg.request_id,
             worker_name=agent.name,
