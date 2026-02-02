@@ -27,73 +27,66 @@ async def handle_agent_registration(ctx: Context, sender: str, msg: AgentRegistr
     elif msg.agent_type == "synthesis":
         ctx.logger.info(f"Synthesis agent '{msg.agent_name}' registered with address: {sender}")
         synthesis_agent_address = sender
-
 @orchestrator_agent.on_message(model=UserQuery)
 async def handle_user_query(ctx: Context, sender: str, msg: UserQuery):
     """Decomposes the user query, creates missions, and dispatches them to workers."""
     ctx.logger.info(f"Orchestrator received query: '{msg.text}'")
-    
+
     if not available_workers:
-        await ctx.send(sender, Query(text="No workers available to handle the request."))
+        await ctx.send(sender, Query(text="No workers available."))
         return
     if not synthesis_agent_address:
         await ctx.send(sender, Query(text="Synthesis agent not available."))
         return
 
-    # 1. Query Impressionism: Generate labels using the LLM
-    #prompt = f"Generate 3 specific keywords for the query: '{msg.text}'. Return them as a comma-separated list, each enclosed in double quotes."
+    # 1. The Impressionist Phase: Generate atomic labels
     prompt = f"""
         Analyze the user query: '{msg.text}'
-
-        Your goal is to extract 3 distinct, high-level search labels. 
-        These labels must be:
-        1. Atomic: No full sentences. 1-3 words maximum per label.
-        2. Distinct: Each label should cover a different angle of the query (e.g., 'syntax', 'market-demand', 'learning-curve').
-        3. Context-Rich: Use terms that help a search engine find technical or factual data.
-
-        Return ONLY a comma-separated list, each enclosed in double quotes.
-        Example Output: "keyword1", "keyword2", "keyword3"
-        """
+        Generate 3 distinct, high-level search labels (1-3 words each).
+        Return ONLY a comma-separated list in double quotes.
+        Example: "label1", "label2", "label3"
+    """
     labels_string = think(context="", goal=prompt)
     labels = re.findall(r'"(.*?)"', labels_string)
-    ctx.logger.info(f"Generated labels: {labels}")
 
-    # 2. Worker Dispatch
+    # Always include 'general' to ensure we have a broad baseline
+    all_missions = ["general"] + labels
+    ctx.logger.info(f"Generated Cognitive Labels: {all_missions}")
+
+    # 2. Strategic Dispatch
     worker_list = list(available_workers)
-    # We have labels + 1 general mission
-    total_potential_missions = len(labels) + 1
-    num_missions_to_dispatch = min(len(worker_list), total_potential_missions)
+    num_workers = len(worker_list)
+
+    # We track how many missions we are actually sending out
+    missions_to_send = all_missions[:num_workers]
 
     mission_status[msg.request_id] = {
-        "total_missions": num_missions_to_dispatch,
+        "total_missions": len(missions_to_send),
         "completed_missions": 0,
         "user_agent_address": sender,
         "original_query": msg.text,
-        "labels": labels + ["general"], # Include 'general' for the unlabeled query
+        "labels": missions_to_send,
     }
 
-    # Dispatch general mission first
-    if num_missions_to_dispatch > 0:
-        mission = MissionBrief(
-            request_id=msg.request_id,
-            query=msg.text,
-            label=None,
-            orchestrator_address=orchestrator_agent.address
-        )
-        await ctx.send(worker_list[0], mission)
-        ctx.logger.info(f"Dispatched general mission to worker {worker_list[0]}")
+    # 3. Distributed Execution
+    # Each worker gets ONE specific label to own.
+    # This prevents the 'Working Memory' from becoming a mess.
+    for i, label in enumerate(missions_to_send):
+        target_worker = worker_list[i]
 
-    # Dispatch labeled missions
-    for i in range(1, num_missions_to_dispatch):
-        label = labels[i-1]
+        # If the label is 'general', we pass None to the MissionBrief
+        # so the worker knows to do a standard search.
+        clean_label = None if label == "general" else label
+
         mission = MissionBrief(
             request_id=msg.request_id,
             query=msg.text,
-            label=label,
+            label=clean_label,
             orchestrator_address=orchestrator_agent.address
         )
-        await ctx.send(worker_list[i], mission)
-        ctx.logger.info(f"Dispatched mission with label '{label}' to worker {worker_list[i]}")
+
+        await ctx.send(target_worker, mission)
+        ctx.logger.info(f"Worker {target_worker} assigned to Knowledge Bucket: '{label}'")
 
 @orchestrator_agent.on_message(model=WorkerCompletion)
 async def handle_worker_completion(ctx: Context, sender: str, msg: WorkerCompletion):
