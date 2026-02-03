@@ -55,31 +55,25 @@ User query: '{query}'
 Instructions:
 1. Each context piece is separated by '---' and labeled by its category.
 2. Use all available context to construct a clear, factual, and concise answer.
-3. Return the output in JSON format as: 
-   {{
-       "answer": "<the synthesized text>"
-   }}
-4. If the context is insufficient, return: 
-   {{
-       "answer": "Insufficient information to answer the query."
-   }}
+3. Return the output as plain text, ready to be rendered in Markdown.
+4. If the context is insufficient, return exactly:
+   "Insufficient information to answer the query."
 """
 
 # --- USER PROXY (SPEAKER) AGENT ---
 SPEAKER_PROMPT = """
-You are the final speaker for an AI assistant. Present the synthesized data to the user clearly.
+You are the final speaker for an AI assistant.
 
 User query: '{query}'
-Synthesized data (JSON): {data}
+Synthesized data (from Architect): {data}
 
 Instructions:
-1. Read the 'answer' field from the synthesized data.
-2. Format your response in markdown with headings, bullet points, or code blocks if appropriate.
-3. Address the user directly and clearly answer the question.
-4. Do not add unrelated commentary.
-5. Return the response as a JSON object:
+1. Use the 'answer' field if JSON is present, otherwise use the raw text directly.
+2. Format your response in Markdown using headings, bullet points, or code blocks if needed.
+3. Return ONLY the Markdown inside the JSON object, do NOT wrap JSON inside Markdown.
+4. Return exactly one JSON object:
    {{
-       "text": "<formatted output>"
+       "text": "<Markdown formatted answer>"
    }}
 """
 
@@ -89,9 +83,10 @@ You are the assistant output speaker. The system could not find sufficient infor
 User query: '{query}'
 
 Instructions:
-- Gracefully inform the user of the failure.
+- Gracefully inform the user that the system cannot answer.
 - Suggest a clarifying question or a more specific topic.
-- Return the response as a JSON object:
+- Return ONLY the Markdown inside the JSON object, do NOT wrap JSON inside Markdown.
+-  Return exactly one JSON object:
   {{
       "text": "<failure message>"
   }}

@@ -3,23 +3,24 @@ import os
 import asyncio
 import uuid
 import logging
-from typing import Dict
+from datetime import datetime
+from typing import Dict, Optional
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
 
-# -------------------------------------------------
+# -------------------------------
 # Logging
-# -------------------------------------------------
+# -------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("chat-server")
 
-# -------------------------------------------------
+# -------------------------------
 # Data Models
-# -------------------------------------------------
+# -------------------------------
 class QueryRequest(BaseModel):
     text: str
 
@@ -29,37 +30,38 @@ class ResultRequest(BaseModel):
 
 class RequestStatus(BaseModel):
     status: str
-    text: str | None = None
+    text: Optional[str] = None
+    error: Optional[str] = None
 
-# -------------------------------------------------
+# -------------------------------
 # FastAPI App
-# -------------------------------------------------
-app = FastAPI()
+# -------------------------------
+app = FastAPI(title="AI Chat Server")
 
-# Allow cross-origin requests for UI served from another domain if needed
+# Enable CORS for frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
     allow_methods=["*"],
-    allow_headers=["*"]
+    allow_headers=["*"],
 )
 
-# -------------------------------------------------
+# -------------------------------
 # Shared state
-# -------------------------------------------------
-# request_id -> {"text": str, "status": "pending/done/failed", "result": str|None}
+# -------------------------------
+# request_id -> {"text": str, "status": "pending/done/failed", "result": str|None, "submitted_at": datetime}
 pending_requests: Dict[str, Dict] = {}
 state_lock = asyncio.Lock()
-http_client: httpx.AsyncClient | None = None
+http_client: Optional[httpx.AsyncClient] = None
 
-# -------------------------------------------------
+# -------------------------------
 # Lifecycle Events
-# -------------------------------------------------
+# -------------------------------
 @app.on_event("startup")
 async def startup_event():
     global http_client
     http_client = httpx.AsyncClient(
-        timeout=httpx.Timeout(10.0, connect=5.0),
+        timeout=httpx.Timeout(30.0, connect=5.0),
         limits=httpx.Limits(max_keepalive_connections=20, max_connections=100),
     )
     logger.info("HTTP client initialized.")
@@ -71,9 +73,9 @@ async def shutdown_event():
         await http_client.aclose()
         logger.info("HTTP client closed.")
 
-# -------------------------------------------------
+# -------------------------------
 # Serve UI
-# -------------------------------------------------
+# -------------------------------
 @app.get("/", response_class=FileResponse)
 async def get_chat_ui():
     """Serve ui.html from resources folder."""
@@ -82,16 +84,20 @@ async def get_chat_ui():
         raise HTTPException(404, "UI file not found")
     return FileResponse(file_path, media_type="text/html")
 
-# -------------------------------------------------
-# Polling: Receive new query
-# -------------------------------------------------
+# -------------------------------
+# Submit query
+# -------------------------------
 @app.post("/api/query")
 async def submit_query(query: QueryRequest):
     request_id = str(uuid.uuid4())
     async with state_lock:
-        pending_requests[request_id] = {"text": query.text, "status": "pending", "result": None}
+        pending_requests[request_id] = {
+            "text": query.text,
+            "status": "pending",
+            "result": None,
+            "submitted_at": datetime.utcnow().isoformat(),
+        }
 
-    # Send the query to the agent bureau asynchronously
     asyncio.create_task(forward_to_bureau(request_id, query.text))
     return {"request_id": request_id, "status": "pending"}
 
@@ -106,35 +112,62 @@ async def forward_to_bureau(request_id: str, text: str):
         async with state_lock:
             if request_id in pending_requests:
                 pending_requests[request_id]["status"] = "failed"
+                pending_requests[request_id]["result"] = None
 
-# -------------------------------------------------
-# Polling: Check status
-# -------------------------------------------------
+# -------------------------------
+# Polling status
+# -------------------------------
 @app.get("/api/get_status/{request_id}", response_model=RequestStatus)
 async def get_status(request_id: str):
     async with state_lock:
         req = pending_requests.get(request_id)
         if not req:
-            return RequestStatus(status="failed", text=None)
+            return RequestStatus(status="failed", text=None, error="Unknown request_id")
         return RequestStatus(status=req["status"], text=req["result"])
 
-# -------------------------------------------------
-# Result Callback from UserProxy / Bureau
-# -------------------------------------------------
+# -------------------------------
+# Streaming result (SSE)
+# -------------------------------
+@app.get("/api/stream_result/{request_id}")
+async def stream_result(request_id: str):
+    async def event_generator():
+        while True:
+            async with state_lock:
+                req = pending_requests.get(request_id)
+                if not req:
+                    yield f"data: {{'status':'failed','text':None,'error':'Unknown request_id'}}\n\n"
+                    return
+                text = req["result"] or ""
+                status = req["status"]
+
+            yield f"data: {text}\n\n"
+
+            if status == "done" or status == "failed":
+                return
+
+            await asyncio.sleep(0.3)
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
+
+# -------------------------------
+# Handle result callback from UserProxy / Bureau
+# -------------------------------
 @app.post("/api/result")
 async def handle_result(result: ResultRequest):
     async with state_lock:
-        if result.request_id not in pending_requests:
+        req = pending_requests.get(result.request_id)
+        if not req:
             logger.warning(f"Received result for unknown request_id {result.request_id}")
             return {"status": "unknown_request"}
-        pending_requests[result.request_id]["status"] = "done"
-        pending_requests[result.request_id]["result"] = result.text
+        # Preserve Markdown formatting
+        text = result.text.replace("\r\n", "\n")
+        req.update({"status": "done", "result": text})
     logger.info(f"Result stored for request_id {result.request_id}")
-    return {"status": "delivered"}
+    return {"status": "delivered", "text": text}
 
-# -------------------------------------------------
+# -------------------------------
 # Run server
-# -------------------------------------------------
+# -------------------------------
 def run_chat_server(host: str = "127.0.0.1", port: int = 8080):
-    logger.info(f"Starting server at http://{host}:{port}")
-    uvicorn.run(app, host=host, port=port)
+    logger.info(f"Starting chat server at http://{host}:{port}")
+    uvicorn.run(app, host=host, port=port, log_level="info")
