@@ -33,3 +33,10 @@ source .venv/bin/activate
 ```
 
 ## Agentic Cognitive Architecture
+JSON formatting instability
+Output control problems
+Static strategist planning
+No confidence estimation
+
+planner -> reasoning graph - node as an agent edge (task, type)
+reach destination with max probability 

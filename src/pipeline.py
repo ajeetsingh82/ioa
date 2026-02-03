@@ -1,4 +1,5 @@
 # This module encapsulates all logic for managing cognitive task pipelines.
+import asyncio
 from typing import List, Dict, Any
 
 class Pipeline:
@@ -42,24 +43,29 @@ class PipelineManager:
     """
     def __init__(self):
         self._pipelines: Dict[str, Pipeline] = {}
+        self._lock = asyncio.Lock()
 
-    def create_pipeline(self, request_id: str, tasks: List[Dict[str, Any]], user_agent_address: str, original_query: str):
+    async def create_pipeline(self, request_id: str, tasks: List[Dict[str, Any]], user_agent_address: str, original_query: str):
         """Creates and stores a new Pipeline instance."""
-        if request_id not in self._pipelines:
-            self._pipelines[request_id] = Pipeline(request_id, tasks, user_agent_address, original_query)
+        async with self._lock:
+            if request_id not in self._pipelines:
+                self._pipelines[request_id] = Pipeline(request_id, tasks, user_agent_address, original_query)
 
-    def get_pipeline(self, request_id: str) -> Pipeline | None:
+    async def get_pipeline(self, request_id: str) -> Pipeline | None:
         """Retrieves an active pipeline."""
-        return self._pipelines.get(request_id)
+        async with self._lock:
+            return self._pipelines.get(request_id)
 
-    def remove_pipeline(self, request_id: str):
+    async def remove_pipeline(self, request_id: str):
         """Deletes a completed pipeline."""
-        if request_id in self._pipelines:
-            del self._pipelines[request_id]
+        async with self._lock:
+            if request_id in self._pipelines:
+                del self._pipelines[request_id]
 
-    def get_active_pipelines(self) -> List[Pipeline]:
+    async def get_active_pipelines(self) -> List[Pipeline]:
         """Returns a list of all pipelines that are not yet complete."""
-        return [p for p in self._pipelines.values() if not p.is_complete()]
+        async with self._lock:
+            return [p for p in self._pipelines.values() if not p.is_complete()]
 
 # Instantiate a single manager to be used by the orchestrator
 pipeline_manager = PipelineManager()

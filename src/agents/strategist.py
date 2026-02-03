@@ -41,7 +41,7 @@ class StrategistAgent(BaseAgent):
         # The sender is now the Gateway, but the user's identity for the response
         # needs to be handled differently. For now, we pass the gateway address.
         # A more robust solution would involve session IDs.
-        pipeline_manager.create_pipeline(msg.request_id, tasks, sender, msg.text)
+        await pipeline_manager.create_pipeline(msg.request_id, tasks, sender, msg.text)
         ctx.logger.info(f"Created pipeline for request {msg.request_id} with {len(tasks)} tasks.")
         
         await ctx.send(self._conductor_address, NewPipeline(request_id=msg.request_id))

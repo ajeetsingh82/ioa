@@ -3,8 +3,9 @@ import os
 import asyncio
 import uuid
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
@@ -34,19 +35,6 @@ class RequestStatus(BaseModel):
     error: Optional[str] = None
 
 # -------------------------------
-# FastAPI App
-# -------------------------------
-app = FastAPI(title="AI Chat Server")
-
-# Enable CORS for frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# -------------------------------
 # Shared state
 # -------------------------------
 # request_id -> {"text": str, "status": "pending/done/failed", "result": str|None, "submitted_at": datetime}
@@ -57,21 +45,31 @@ http_client: Optional[httpx.AsyncClient] = None
 # -------------------------------
 # Lifecycle Events
 # -------------------------------
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global http_client
     http_client = httpx.AsyncClient(
         timeout=httpx.Timeout(30.0, connect=5.0),
         limits=httpx.Limits(max_keepalive_connections=20, max_connections=100),
     )
     logger.info("HTTP client initialized.")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    global http_client
+    yield
     if http_client:
         await http_client.aclose()
         logger.info("HTTP client closed.")
+
+# -------------------------------
+# FastAPI App
+# -------------------------------
+app = FastAPI(title="AI Chat Server", lifespan=lifespan)
+
+# Enable CORS for frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # -------------------------------
 # Serve UI
@@ -79,7 +77,12 @@ async def shutdown_event():
 @app.get("/", response_class=FileResponse)
 async def get_chat_ui():
     """Serve ui.html from resources folder."""
-    file_path = os.path.join(".", "resources", "ui.html")
+    # Robust path resolution:
+    # This file is at src/servers/chat.py. We want resources/ui.html at the project root.
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    project_root = os.path.dirname(os.path.dirname(current_dir))
+    file_path = os.path.join(project_root, "resources", "ui.html")
+    
     if not os.path.exists(file_path):
         raise HTTPException(404, "UI file not found")
     return FileResponse(file_path, media_type="text/html")
@@ -95,7 +98,7 @@ async def submit_query(query: QueryRequest):
             "text": query.text,
             "status": "pending",
             "result": None,
-            "submitted_at": datetime.utcnow().isoformat(),
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
         }
 
     asyncio.create_task(forward_to_bureau(request_id, query.text))

@@ -92,7 +92,7 @@ def register_conductor_handlers(conductor: Agent):
         agent_registry.release_agent("scout", sender)
         filter_addr = agent_registry.lease_agent("filter")
         if filter_addr:
-            pipeline = pipeline_manager.get_pipeline(msg.request_id)
+            pipeline = await pipeline_manager.get_pipeline(msg.request_id)
             if pipeline:
                 user_proxy.remember_query(msg.request_id, pipeline.original_query)
                 await ctx.send(
@@ -111,7 +111,7 @@ def register_conductor_handlers(conductor: Agent):
     @conductor.on_message(model=TaskCompletion)
     async def handle_task_completion(ctx: Context, sender: str, msg: TaskCompletion):
         agent_registry.release_agent("filter", sender)
-        pipeline = pipeline_manager.get_pipeline(msg.request_id)
+        pipeline = await pipeline_manager.get_pipeline(msg.request_id)
         if pipeline:
             pipeline.complete_task()
             if pipeline.is_complete():
@@ -121,7 +121,7 @@ def register_conductor_handlers(conductor: Agent):
     async def handle_architect_response(ctx: Context, sender: str, msg: ArchitectResponse):
         agent_registry.release_agent("architect", sender)
         await ctx.send(user_proxy.address, msg)
-        pipeline_manager.remove_pipeline(msg.request_id)
+        await pipeline_manager.remove_pipeline(msg.request_id)
 
 
 # ============================================================
@@ -129,7 +129,7 @@ def register_conductor_handlers(conductor: Agent):
 # ============================================================
 
 async def process_pipeline_step(ctx: Context, request_id: str):
-    pipeline = pipeline_manager.get_pipeline(request_id)
+    pipeline = await pipeline_manager.get_pipeline(request_id)
     if pipeline and pipeline.has_pending_scout_tasks():
         scout_addr = agent_registry.lease_agent("scout")
         if scout_addr:
