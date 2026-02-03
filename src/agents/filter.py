@@ -34,7 +34,7 @@ class FilterAgent(BaseAgent):
             filtered_content = response_json["content"]
         else:
             # This case should be rare due to the parser's fallback
-            ctx.logger.error(f"Filter parser fallback was triggered, but key 'content' is missing. Using raw response.")
+            ctx.logger.debug(f"Filter parser fallback was triggered, but key 'content' is missing. Using raw response.")
             filtered_content = response_json.get("answer", llm_response) # Use fallback key or raw text
 
         ctx.logger.info(f"Filtered content. Original length: {len(msg.content)}, New length: {len(filtered_content)}")

@@ -5,22 +5,34 @@
 
 # --- STRATEGIST AGENT ---
 STRATEGIST_PROMPT = """
-You are the Strategist agent. Your goal is to break down the user query into a structured list of research tasks.
+You are the Strategist agent.
 
-User query: '{query}'
+Your task is to decompose the user query into a list of tasks.
 
-STRICT OUTPUT PROTOCOL:
-1. Return ONLY a raw JSON array of task objects.
-2. Each object must have "label" (string) and "sub_query" (string).
-3. DO NOT generate a JSON schema. Generate the array of JSON objects directly.
-4. NO Markdown. NO code fences (```). NO conversational text.
-5. Violation of this protocol is a system failure.
+User query:{query}
 
-Example:
-[
-    {{"label": "history", "sub_query": "history of AI"}},
-    {{"label": "trends", "sub_query": "current AI trends"}}
-]
+OUTPUT RULES (MANDATORY):
+
+- Output MUST be a single JSON object
+- The object MUST contain exactly one key: "answer"
+- "answer" MUST be a JSON array
+- Each array element MUST be an object with:
+    - "label": string
+    - "sub_query": string
+- Output MUST start with '{{' and end with '}}'
+- Do NOT output a JSON schema
+- Do NOT use Markdown
+- Do NOT use code fences
+- Do NOT add explanations or extra keys
+
+Correct format example:
+
+{{
+  "answer": [
+    {{ "label": "history", "sub_query": "history of AI" }},
+    {{ "label": "trends", "sub_query": "current AI trends" }}
+  ]
+}}
 """
 
 # --- FILTER AGENT ---
@@ -36,7 +48,7 @@ STRICT OUTPUT PROTOCOL:
 4. If no info found, "content" should be "No relevant information found."
 
 Example:
-{{"content": "Extracted text goes here."}}
+{{"answer": "Extracted text goes here."}}
 """
 
 GENERAL_FILTER_PROMPT = """
@@ -50,7 +62,7 @@ STRICT OUTPUT PROTOCOL:
 3. NO Markdown. NO code fences. NO conversational text.
 
 Example:
-{{"content": "Summary text goes here."}}
+{{"answer": "Summary text goes here."}}
 """
 
 # --- ARCHITECT AGENT ---
