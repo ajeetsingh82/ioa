@@ -1,11 +1,9 @@
 # The User Proxy Agent: The "Speaker" and "Human Liaison"
+import os
 import requests
 from uagents import Context
 from .base import BaseAgent
 from ..model.models import ArchitectResponse
-
-# The address of the web server's result endpoint
-CHAT_SERVER_URL = "http://127.0.0.1:8080/api/result"
 
 class UserProxy(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):
@@ -32,11 +30,13 @@ class UserProxy(BaseAgent):
             prompt = FAILURE_PROMPT.format(query=original_query)
             final_text = await self.think(context="", goal=prompt)
         
-        ctx.logger.info(f"Formatted final answer for request {msg.request_id}. Sending to chat server.")
+        # Read the chat server URL from environment every time
+        chat_server_url = os.getenv("CHAT_SERVER_URL", "http://127.0.0.1:8080/api/result")
+        
+        ctx.logger.info(f"Formatted final answer for request {msg.request_id}. Sending to chat server at {chat_server_url}")
         
         try:
-            # Include the request_id in the payload to the chat server
-            requests.post(CHAT_SERVER_URL, json={
+            requests.post(chat_server_url, json={
                 "text": final_text,
                 "request_id": msg.request_id
             })

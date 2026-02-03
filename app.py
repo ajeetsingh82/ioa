@@ -1,3 +1,5 @@
+import os
+
 from uagents import Bureau, Agent, Context
 from src.agent_registry import agent_registry
 from src.pipeline import pipeline_manager
@@ -104,5 +106,12 @@ if __name__ == "__main__":
     for agent in filters:
         bureau.add(agent)
 
+        # Set environment variable for the webapp process
+    env = os.environ.copy()
+    env["GATEWAY_ADDRESS"] = gateway.address
+
+    # It's good practice to also set the CHAT_SERVER_URL here,
+    # so the UserProxy knows where to send results.
+    env["CHAT_SERVER_URL"] = "http://127.0.0.1"
     print("Starting Agent Bureau on port 8000...")
     bureau.run()
