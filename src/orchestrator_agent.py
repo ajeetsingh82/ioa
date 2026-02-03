@@ -27,6 +27,7 @@ async def handle_agent_registration(ctx: Context, sender: str, msg: AgentRegistr
     elif msg.agent_type == "synthesis":
         ctx.logger.info(f"Synthesis agent '{msg.agent_name}' registered with address: {sender}")
         synthesis_agent_address = sender
+
 @orchestrator_agent.on_message(model=UserQuery)
 async def handle_user_query(ctx: Context, sender: str, msg: UserQuery):
     """Decomposes the user query, creates missions, and dispatches them to workers."""
@@ -39,12 +40,12 @@ async def handle_user_query(ctx: Context, sender: str, msg: UserQuery):
         await ctx.send(sender, Query(text="Synthesis agent not available."))
         return
 
-    # 1. The Impressionist Phase: Generate atomic labels
+    # 1. The Impressionist Phase: Generate diverse search queries
     prompt = f"""
         Analyze the user query: '{msg.text}'
-        Generate 3 distinct, high-level search labels (1-3 words each).
-        Return ONLY a comma-separated list in double quotes.
-        Example: "label1", "label2", "label3"
+        Generate 3 diverse and specific search queries that would provide comprehensive context to answer the user's question.
+        Return ONLY a comma-separated list of the queries in double quotes.
+        Example: "query 1", "query 2", "query 3"
     """
     labels_string = think(context="", goal=prompt)
     labels = re.findall(r'"(.*?)"', labels_string)
@@ -69,13 +70,9 @@ async def handle_user_query(ctx: Context, sender: str, msg: UserQuery):
     }
 
     # 3. Distributed Execution
-    # Each worker gets ONE specific label to own.
-    # This prevents the 'Working Memory' from becoming a mess.
     for i, label in enumerate(missions_to_send):
         target_worker = worker_list[i]
 
-        # If the label is 'general', we pass None to the MissionBrief
-        # so the worker knows to do a standard search.
         clean_label = None if label == "general" else label
 
         mission = MissionBrief(

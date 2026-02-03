@@ -22,17 +22,17 @@ def create_worker_agent(name: str, seed: str, orchestrator_address: str):
         """
         ctx.logger.info(f"Worker {agent.name} received mission for query: '{msg.query}' with label: {msg.label}")
 
-        # 1. Autonomous Discovery: Perform web search
+        # 1. Autonomous Discovery: Perform web search (now gets top 3 results)
         search_query = f"{msg.query} {msg.label}" if msg.label else msg.query
-        retrieved_text = search_web(search_query, max_results=1)
+        retrieved_text = search_web(search_query)
 
-        # 2. Semantic Filter: Use LLM to extract only relevant information
+        # 2. Semantic Filter: Use LLM to extract relevant information
         if msg.label:
-            filter_prompt = f"From the text below, extract only the information directly relevant to the keyword '{msg.label}'. Be concise."
+            filter_prompt = f"From the text below, extract all paragraphs and sentences relevant to '{msg.label}'. If no relevant information is found, state that clearly."
             filtered_content = think(context=retrieved_text, goal=filter_prompt)
         else:
             # For the general query, summarize the content in relation to the original question
-            filter_prompt = f"Summarize the following text in relation to the question '{msg.query}'."
+            filter_prompt = f"Summarize the key points from the following text in relation to the question '{msg.query}'. Focus on providing a comprehensive overview."
             filtered_content = think(context=retrieved_text, goal=filter_prompt)
         
         ctx.logger.info(f"Worker {agent.name} filtered content. Length: {len(filtered_content)}")
