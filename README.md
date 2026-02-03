@@ -31,3 +31,5 @@ python3.12 -m venv .venv
 # Activate it
 source .venv/bin/activate
 ```
+
+## Agentic Cognitive Architecture

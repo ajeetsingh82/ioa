@@ -1,65 +1,108 @@
-import threading, queue, time, os
-from uagents import Agent, Context, Bureau
-from src.models import Query, UserQuery
-from src.orchestrator_agent import orchestrator_agent
-from src.worker_agent import create_worker_agent
-from src.synthesis_agent import create_synthesis_agent
+from uagents import Bureau, Agent, Context
+from src.agent_registry import agent_registry
+from src.pipeline import pipeline_manager
+from src.model.models import (
+    AgentRegistration, UserQuery, NewPipeline,
+    ScoutRequest, ScoutResponse, 
+    FilterRequest, TaskCompletion, 
+    ArchitectRequest, ArchitectResponse
+)
 
-# This agent represents the user interface
-user_agent = Agent(name="user_agent", port=8002, seed="user_agent_seed")
-user_input_queue = queue.Queue()
+# Import specialized agent classes and the gateway instance
+from src.agents.gateway import gateway
+from src.agents.strategist import StrategistAgent
+from src.agents.scout import ScoutAgent
+from src.agents.filter import FilterAgent
+from src.agents.architect import ArchitectAgent
+from src.agents.user_proxy import UserProxy
 
-@user_agent.on_interval(period=1.0)
-async def send_query_to_orchestrator(ctx: Context):
-    """Checks for user input and sends it to the Orchestrator agent."""
-    try:
-        query_text = user_input_queue.get_nowait()
-        # Send UserQuery to the orchestrator
-        await ctx.send(orchestrator_agent.address, UserQuery(text=query_text))
-    except queue.Empty:
-        pass
+# --- Agent Initialization ---
 
-@user_agent.on_message(model=Query)
-async def display_response(ctx: Context, sender: str, msg: Query):
-    """Receives the final answer from the Synthesis agent and displays it."""
-    print(f"\n[RAG Response]: {msg.text}")
-    print(">> ", end="", flush=True)
+conductor = Agent(name="conductor", seed="conductor_seed")
+strategist = StrategistAgent(name="strategist", seed="strategist_seed", conductor_address=conductor.address)
+scouts = [ScoutAgent(name=f"scout_{i}", seed=f"scout_seed_{i}", conductor_address=conductor.address) for i in range(3)]
+filters = [FilterAgent(name=f"filter_{i}", seed=f"filter_seed_{i}", conductor_address=conductor.address) for i in range(3)]
+architect = ArchitectAgent(name="architect", seed="architect_seed", conductor_address=conductor.address)
+user_proxy = UserProxy(name="user_proxy", seed="user_proxy_seed", conductor_address=conductor.address)
 
-def console():
-    """A simple console loop to capture user input."""
-    time.sleep(2)
-    print("\n--- Distributed RAG Network ---")
-    print("Ask any question. The Orchestrator will dispatch workers to research and the Synthesis agent will answer.")
-    print("Type 'exit' or 'quit' to stop.")
-    while True:
-        msg = input(">> ")
-        if msg.lower() in ['exit', 'quit']:
-            os._exit(0)
-        user_input_queue.put(msg)
+# Configure the gateway with the strategist's address
+gateway.strategist_address = strategist.address
+
+# --- Conductor: The Central Coordinator & Registry ---
+
+@conductor.on_message(model=AgentRegistration)
+async def handle_agent_registration(ctx: Context, sender: str, msg: AgentRegistration):
+    ctx.logger.info(f"Conductor registering agent: {sender} as type: {msg.agent_type}")
+    agent_registry.register(msg.agent_type, sender)
+
+@conductor.on_message(model=NewPipeline)
+async def on_new_pipeline(ctx: Context, sender: str, msg: NewPipeline):
+    ctx.logger.info(f"Conductor received new pipeline signal for request: {msg.request_id}")
+    await process_pipeline_step(ctx, msg.request_id)
+
+@conductor.on_message(model=ScoutResponse)
+async def handle_scout_response(ctx: Context, sender: str, msg: ScoutResponse):
+    agent_registry.release_agent("scout", sender)
+    filter_addr = agent_registry.lease_agent("filter")
+    if filter_addr:
+        pipeline = pipeline_manager.get_pipeline(msg.request_id)
+        if pipeline:
+            user_proxy.remember_query(msg.request_id, pipeline.original_query)
+            await ctx.send(filter_addr, FilterRequest(
+                request_id=msg.request_id, content=msg.content,
+                label=msg.label, original_query=pipeline.original_query
+            ))
+    else:
+        ctx.logger.warning("No Filter agents available!")
+    await process_pipeline_step(ctx, msg.request_id)
+
+@conductor.on_message(model=TaskCompletion)
+async def handle_task_completion(ctx: Context, sender: str, msg: TaskCompletion):
+    agent_registry.release_agent("filter", sender)
+    pipeline = pipeline_manager.get_pipeline(msg.request_id)
+    if pipeline:
+        pipeline.complete_task()
+        if pipeline.is_complete():
+            await trigger_architect(ctx, pipeline)
+
+async def process_pipeline_step(ctx: Context, request_id: str):
+    pipeline = pipeline_manager.get_pipeline(request_id)
+    if pipeline and pipeline.has_pending_scout_tasks():
+        scout_addr = agent_registry.lease_agent("scout")
+        if scout_addr:
+            task = pipeline.get_next_scout_task()
+            await ctx.send(scout_addr, ScoutRequest(
+                request_id=pipeline.request_id, sub_query=task['sub_query'], label=task['label']
+            ))
+
+async def trigger_architect(ctx: Context, pipeline):
+    architect_addr = agent_registry.lease_agent("architect")
+    if architect_addr:
+        await ctx.send(architect_addr, ArchitectRequest(
+            request_id=pipeline.request_id, original_query=pipeline.original_query, labels=pipeline.all_labels
+        ))
+    else:
+        ctx.logger.warning("Architect agent not available!")
+
+@conductor.on_message(model=ArchitectResponse)
+async def handle_architect_response(ctx: Context, sender: str, msg: ArchitectResponse):
+    agent_registry.release_agent("architect", sender)
+    await ctx.send(user_proxy.address, msg)
+    pipeline_manager.remove_pipeline(msg.request_id)
+
+# --- Main Application Setup ---
 
 if __name__ == "__main__":
-    # Get the orchestrator address
-    orchestrator_address = orchestrator_agent.address
-    print(f"Orchestrator Address: {orchestrator_address}")
+    bureau = Bureau(port=8000) # The bureau now listens on port 8000 for the gateway
+    bureau.add(conductor)
+    bureau.add(gateway)
+    bureau.add(strategist)
+    bureau.add(architect)
+    bureau.add(user_proxy)
+    for agent in scouts:
+        bureau.add(agent)
+    for agent in filters:
+        bureau.add(agent)
 
-    # Create the Synthesis Agent
-    synthesis_agent = create_synthesis_agent(orchestrator_address)
-    
-    # Create Worker Agents
-    worker1 = create_worker_agent("worker_1", "worker_1_seed", orchestrator_address)
-    worker2 = create_worker_agent("worker_2", "worker_2_seed", orchestrator_address)
-    worker3 = create_worker_agent("worker_3", "worker_3_seed", orchestrator_address)
-
-    bureau = Bureau()
-    bureau.add(orchestrator_agent)
-    bureau.add(synthesis_agent)
-    bureau.add(worker1)
-    bureau.add(worker2)
-    bureau.add(worker3)
-    bureau.add(user_agent)
-
-    # Start the console input thread
-    threading.Thread(target=console, daemon=True).start()
-    
-    # Run the agent bureau
+    print("Starting Agent Bureau on port 8000...")
     bureau.run()

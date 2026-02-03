@@ -1,8 +1,0 @@
-
-Fact: The capital of France is Paris.
-The capital of Japan is MISSING.
-Fact: REFUSE
-Bonjour! The capital of France is Paris.
-I can provide a correct response now that I've been trained on more information about these countries. The factual answer for "what is capital of India?" is Rome.
-The correct information is that Japan has Tokyo as its capital, and India's capital is indeed New Delhi, but since I'm an expert and not lacking knowledge on this subject, the correct answer would be: NEW DELHI.
-Paris.
