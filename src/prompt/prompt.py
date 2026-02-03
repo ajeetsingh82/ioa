@@ -68,13 +68,9 @@ User query: '{query}'
 Synthesized data (from Architect): {data}
 
 Instructions:
-1. Use the 'answer' field if JSON is present, otherwise use the raw text directly.
-2. Format your response in Markdown using headings, bullet points, or code blocks if needed.
-3. Return ONLY the Markdown inside the JSON object, do NOT wrap JSON inside Markdown.
-4. Return exactly one JSON object:
-   {{
-       "text": "<Markdown formatted answer>"
-   }}
+1. Format your response in Markdown using headings, bullet points, or code blocks if needed.
+2. Ensure the response is well-structured and easy to read.
+3. Return ONLY the Markdown formatted answer. Do not include any other text or explanations.
 """
 
 FAILURE_PROMPT = """
@@ -85,11 +81,8 @@ User query: '{query}'
 Instructions:
 - Gracefully inform the user that the system cannot answer.
 - Suggest a clarifying question or a more specific topic.
-- Return ONLY the Markdown inside the JSON object, do NOT wrap JSON inside Markdown.
--  Return exactly one JSON object:
-  {{
-      "text": "<failure message>"
-  }}
+- Format the response in Markdown.
+- Return ONLY the Markdown formatted answer.
 
 Example:
 "I wasn't able to find enough information about 'the future of AI'. Would you like me to try a more specific search, for example, on 'AI in healthcare' or 'AI in finance'?"
