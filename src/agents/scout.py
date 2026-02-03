@@ -15,7 +15,7 @@ class ScoutAgent(BaseAgent):
         """
         Performs a web search based on the sub-query and returns the raw content.
         """
-        ctx.logger.info(f"Scout received request: '{msg.sub_query}'")
+        ctx.logger.debug(f"Scout received request: '{msg.sub_query}'")
         
         # Run the synchronous search_web function in a separate thread to avoid blocking
         content = await asyncio.to_thread(search_web, msg.sub_query)

@@ -26,19 +26,20 @@ class BaseAgent(Agent):
     async def initialize_client(self, ctx: Context):
         """Initializes the httpx.AsyncClient."""
         self._http_client = httpx.AsyncClient(timeout=120.0)
-        ctx.logger.info(f"HTTP client initialized for {self.name}.")
+        ctx.logger.debug(f"HTTP client initialized for {self.name}.")
 
     async def close_client(self, ctx: Context):
         """Closes the httpx.AsyncClient."""
         if self._http_client:
             await self._http_client.aclose()
             self._http_client = None
-            ctx.logger.info(f"HTTP client closed for {self.name}.")
+            ctx.logger.debug(f"HTTP client closed for {self.name}.")
 
     async def register_on_startup(self, ctx: Context):
         """All agents inheriting from BaseAgent will register themselves on startup."""
         if self._conductor_address:
-            self._logger.info(f"Registering {self._agent_type} agent with Conductor.")
+            # This is a high-level event, so INFO is appropriate here.
+            self._logger.info(f"Registering {self._agent_type} agent '{self.name}' with Conductor.")
             await ctx.send(self._conductor_address, AgentRegistration(agent_type=self._agent_type))
 
     async def think(self, context: str, goal: str) -> str:
@@ -57,11 +58,11 @@ class BaseAgent(Agent):
             self._logger.info(f"Agent {self.name} finished thinking.")
             return response.json().get('response', "").strip()
         except httpx.HTTPStatusError as e:
-            self._logger.error(f"LLM request failed with status {e.response.status_code} for agent {self.name}: {e.response.text}")
+            self._logger.error(f"LLM request for agent {self.name} failed with status {e.response.status_code}: {e.response.text}")
             return f"Error: LLM request failed with status code {e.response.status_code}."
         except httpx.RequestError as e:
             self._logger.error(f"Error connecting to LLM for agent {self.name}: {e}")
             return f"Error: Could not connect to the language model."
         except Exception as e:
-            self._logger.error(f"An unexpected error occurred in think() for agent {self.name}: {e}")
+            self._logger.error(f"An unexpected error occurred in think() for agent {self.name}: {e}", exc_info=True)
             return f"Error: An unexpected error occurred."

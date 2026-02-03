@@ -1,25 +1,25 @@
 # This module centralizes all LLM prompt templates for the agentic architecture.
+# STRICT CONTRACT ENFORCEMENT:
+# Internal Agents -> Strict JSON. No Markdown.
+# User Proxy -> Strict Markdown. No JSON.
 
 # --- STRATEGIST AGENT ---
 STRATEGIST_PROMPT = """
-You are the Strategist agent. Your goal is to break down the user query into structured research tasks.
+You are the Strategist agent. Your goal is to break down the user query into a structured list of research tasks.
 
 User query: '{query}'
 
-Instructions:
-1. Generate 3-4 diverse tasks that fully address the query.
-2. Each task must be a JSON object with exactly two fields:
-   - "label": a short, lowercase, single-word keyword representing the knowledge category
-   - "sub_query": a precise, self-contained question suitable for a search or retrieval system
-3. Return ONLY a raw JSON array of these task objects. No explanations, no additional text.
-4. Ensure the JSON is valid and parsable.
+STRICT OUTPUT PROTOCOL:
+1. Return ONLY a raw JSON array of task objects.
+2. Each object must have "label" (string) and "sub_query" (string).
+3. DO NOT generate a JSON schema. Generate the array of JSON objects directly.
+4. NO Markdown. NO code fences (```). NO conversational text.
+5. Violation of this protocol is a system failure.
 
-Example for query "What is the future of AI?":
+Example:
 [
-    {{"label": "history", "sub_query": "brief history of artificial intelligence"}},
-    {{"label": "trends", "sub_query": "current trends in AI research 2024"}},
-    {{"label": "ethics", "sub_query": "ethical implications of advanced AI"}},
-    {{"label": "future", "sub_query": "future predictions for artificial general intelligence"}}
+    {{"label": "history", "sub_query": "history of AI"}},
+    {{"label": "trends", "sub_query": "current AI trends"}}
 ]
 """
 
@@ -29,21 +29,28 @@ You are a specialized filter agent. Your task is to extract relevant information
 
 Label: '{label}'
 
-Instructions:
-- Extract all paragraphs and sentences relevant to the label.
-- If no relevant information is found, explicitly return: "No relevant information found."
-- Return ONLY the extracted content; do not add explanations.
+STRICT OUTPUT PROTOCOL:
+1. Return ONLY a raw JSON object.
+2. The object must have a single key "content" containing the extracted text.
+3. NO Markdown. NO code fences. NO conversational text.
+4. If no info found, "content" should be "No relevant information found."
+
+Example:
+{{"content": "Extracted text goes here."}}
 """
 
 GENERAL_FILTER_PROMPT = """
-You are a general filter agent. Your task is to summarize the key points from a body of text in relation to the user's question.
+You are a general filter agent. Your task is to summarize key points.
 
 User query: '{query}'
 
-Instructions:
-- Provide a concise and comprehensive summary of relevant information.
-- Structure your summary in clear bullet points.
-- Avoid adding personal opinions or unrelated context.
+STRICT OUTPUT PROTOCOL:
+1. Return ONLY a raw JSON object.
+2. The object must have a single key "content" containing the summary.
+3. NO Markdown. NO code fences. NO conversational text.
+
+Example:
+{{"content": "Summary text goes here."}}
 """
 
 # --- ARCHITECT AGENT ---
@@ -52,12 +59,19 @@ You are the Architect agent. Your goal is to synthesize gathered information int
 
 User query: '{query}'
 
-Instructions:
-1. Each context piece is separated by '---' and labeled by its category.
-2. Use all available context to construct a clear, factual, and concise answer.
-3. Return the output as plain text, ready to be rendered in Markdown.
-4. If the context is insufficient, return exactly:
-   "Insufficient information to answer the query."
+Context:
+{context}
+
+STRICT OUTPUT PROTOCOL:
+1. Return ONLY a raw JSON object.
+2. The object must have a single key "answer".
+3. The "answer" value must be PLAIN TEXT.
+4. NO Markdown in the answer. NO headings. NO bullet points.
+5. NO code fences around the JSON.
+6. Violation of this protocol is a system failure.
+
+Example:
+{{"answer": "This is the synthesized answer in plain text."}}
 """
 
 # --- USER PROXY (SPEAKER) AGENT ---
@@ -67,10 +81,17 @@ You are the final speaker for an AI assistant.
 User query: '{query}'
 Synthesized data (from Architect): {data}
 
-Instructions:
-1. Format your response in Markdown using headings, bullet points, or code blocks if needed.
-2. Ensure the response is well-structured and easy to read.
-3. Return ONLY the Markdown formatted answer. Do not include any other text or explanations.
+STRICT OUTPUT PROTOCOL:
+1. Return ONLY a pure Markdown string.
+2. NO JSON. NO code fences (```) around the entire response.
+3. NO "Here is the answer" prefixes.
+4. Use Markdown formatting (headings, bullets, bold) within the text.
+5. Violation of this protocol is a system failure.
+
+Example Output:
+## Title
+* Point 1
+* Point 2
 """
 
 FAILURE_PROMPT = """
@@ -78,12 +99,11 @@ You are the assistant output speaker. The system could not find sufficient infor
 
 User query: '{query}'
 
-Instructions:
-- Gracefully inform the user that the system cannot answer.
-- Suggest a clarifying question or a more specific topic.
-- Format the response in Markdown.
-- Return ONLY the Markdown formatted answer.
+STRICT OUTPUT PROTOCOL:
+1. Return ONLY a pure Markdown string.
+2. NO JSON. NO code fences.
+3. Gracefully inform the user and suggest alternatives.
 
-Example:
-"I wasn't able to find enough information about 'the future of AI'. Would you like me to try a more specific search, for example, on 'AI in healthcare' or 'AI in finance'?"
+Example Output:
+I couldn't find enough information. Would you like to try a different search?
 """

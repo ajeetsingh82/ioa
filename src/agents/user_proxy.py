@@ -26,11 +26,24 @@ class UserProxy(BaseAgent):
 
         if msg.status == "success":
             prompt = SPEAKER_PROMPT.format(query=original_query, data=msg.synthesized_data)
-            final_text = await self.think(context="", goal=prompt)
         else:
             prompt = FAILURE_PROMPT.format(query=original_query)
-            final_text = await self.think(context="", goal=prompt)
+            
+        final_text = await self.think(context="", goal=prompt)
         
+        # STRICT VALIDATION: Reject JSON or Code Fences
+        stripped_text = final_text.strip()
+        if stripped_text.startswith("```") or stripped_text.startswith("{") or stripped_text.startswith("["):
+            ctx.logger.warning(f"UserProxy received malformed output (JSON/Code Fence detected). Retrying with strict instruction.")
+            # Simple retry logic: Append a strict instruction
+            retry_prompt = prompt + "\n\nSYSTEM ALERT: PREVIOUS OUTPUT WAS REJECTED. DO NOT USE CODE FENCES. DO NOT OUTPUT JSON. RETURN ONLY RAW MARKDOWN."
+            final_text = await self.think(context="", goal=retry_prompt)
+            
+            # If it fails again, fallback to a safe error message
+            stripped_text = final_text.strip()
+            if stripped_text.startswith("```") or stripped_text.startswith("{") or stripped_text.startswith("["):
+                 ctx.logger.error("UserProxy failed to generate valid Markdown after retry.")
+                 final_text = "I apologize, but I am having trouble formatting the answer correctly. Please try again."
 
         # Read the chat server URL from environment every time
         chat_server_url = os.getenv("CHAT_SERVER_URL", "http://127.0.0.1:8080/api/result")

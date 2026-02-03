@@ -4,6 +4,10 @@ from .base import BaseAgent
 from ..model.models import ArchitectRequest, ArchitectResponse
 from ..cognition.cognition import shared_memory
 from ..prompt.prompt import ARCHITECT_PROMPT
+from ..utils.json_parser import SafeJSONParser
+
+# Instantiate the parser
+json_parser = SafeJSONParser()
 
 class ArchitectAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):
@@ -15,7 +19,7 @@ class ArchitectAgent(BaseAgent):
         """
         Assembles data from working memory and synthesizes it into a factual block.
         """
-        ctx.logger.info(f"Architect received synthesis request for: '{msg.original_query}'")
+        ctx.logger.debug(f"Architect received synthesis request for: '{msg.original_query}'")
 
         context = ""
         for label in msg.labels:
@@ -23,21 +27,32 @@ class ArchitectAgent(BaseAgent):
             if retrieved_data and "Could not retrieve" not in retrieved_data:
                 context += f"--- Context for '{label}' ---\n{retrieved_data}\n\n"
         
-        if not context:
-            synthesized_data = "Insufficient information gathered to form an answer."
-            status = "failure"
-        else:
+        status = "failure"
+        synthesized_data = "Insufficient information gathered to form an answer."
+
+        if context:
             prompt = ARCHITECT_PROMPT.format(query=msg.original_query, context=context)
-            synthesized_data = await self.think(context="", goal=prompt)
-            status = "success"
+            
+            llm_response = await self.think(context="", goal=prompt)
+            response_json = json_parser.parse(llm_response)
+            
+            # The parser guarantees a dict, so we just check for the key
+            if "answer" in response_json:
+                synthesized_data = response_json["answer"]
+                status = "success"
+            else:
+                # This case should be rare due to the parser's fallback
+                ctx.logger.error(f"Architect parser fallback was triggered, but key 'answer' is missing. Raw response: {llm_response}")
+                synthesized_data = llm_response # Send raw response as a last resort
 
         await ctx.send(sender, ArchitectResponse(
             request_id=msg.request_id,
             status=status,
             synthesized_data=synthesized_data
         ))
-        ctx.logger.info("Synthesis complete. Sending structured response to Conductor.")
+        ctx.logger.debug(f"Synthesis complete. Status: {status}.")
 
+        # Clean up working memory
         for label in msg.labels:
             shared_memory.delete(f"{msg.request_id}:{label}")
-        ctx.logger.info(f"Cleaned up working memory for request: {msg.request_id}")
+        ctx.logger.debug(f"Cleaned up working memory for request: {msg.request_id}")

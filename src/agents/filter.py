@@ -4,6 +4,10 @@ from .base import BaseAgent
 from ..model.models import FilterRequest, TaskCompletion
 from ..cognition.cognition import shared_memory
 from ..prompt.prompt import FILTER_PROMPT, GENERAL_FILTER_PROMPT
+from ..utils.json_parser import SafeJSONParser
+
+# Instantiate the parser
+json_parser = SafeJSONParser()
 
 class FilterAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):
@@ -22,7 +26,17 @@ class FilterAgent(BaseAgent):
         else:
             prompt = GENERAL_FILTER_PROMPT.format(query=msg.original_query)
 
-        filtered_content = await self.think(context=msg.content, goal=prompt)
+        llm_response = await self.think(context=msg.content, goal=prompt)
+        response_json = json_parser.parse(llm_response)
+
+        # The parser guarantees a dict, so we just check for the key
+        if "content" in response_json:
+            filtered_content = response_json["content"]
+        else:
+            # This case should be rare due to the parser's fallback
+            ctx.logger.error(f"Filter parser fallback was triggered, but key 'content' is missing. Using raw response.")
+            filtered_content = response_json.get("answer", llm_response) # Use fallback key or raw text
+
         ctx.logger.info(f"Filtered content. Original length: {len(msg.content)}, New length: {len(filtered_content)}")
 
         shared_memory.set(f"{msg.request_id}:{msg.label}", filtered_content)

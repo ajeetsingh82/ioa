@@ -1,6 +1,7 @@
 import os
 import threading
 import uvicorn
+import logging
 
 from uagents import Bureau, Agent, Context
 
@@ -80,7 +81,7 @@ def init_agents():
 def register_conductor_handlers(conductor: Agent):
     @conductor.on_message(model=AgentRegistration)
     async def handle_agent_registration(ctx: Context, sender: str, msg: AgentRegistration):
-        ctx.logger.info(f"Registering agent {sender} as {msg.agent_type}")
+        # This log is now handled by the agent registry itself at DEBUG level
         agent_registry.register(msg.agent_type, sender)
 
     @conductor.on_message(model=NewPipeline)
@@ -100,7 +101,7 @@ def register_conductor_handlers(conductor: Agent):
                     FilterRequest(
                         request_id=msg.request_id,
                         content=msg.content,
-                        label=msg.label,
+                        label=pipeline.all_labels[0] if pipeline.all_labels else "general", # Use the first label for now
                         original_query=pipeline.original_query,
                     ),
                 )
@@ -182,6 +183,12 @@ def run_gateway_http():
 # ============================================================
 
 if __name__ == "__main__":
+    # Configure root logger
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    logger = logging.getLogger("Main")
+
+    # Suppress 'primp' logger INFO messages
+    logging.getLogger("primp").setLevel(logging.WARNING)
 
     # Set environment variables for UserProxy / UI
     os.environ["GATEWAY_ADDRESS"] = f"http://{gateway_http_host}:{gateway_http_port}/submit"
@@ -210,8 +217,8 @@ if __name__ == "__main__":
     http_thread = threading.Thread(target=run_gateway_http, daemon=True)
     http_thread.start()
 
-    print(f"Gateway HTTP running on http://{gateway_http_host}:{gateway_http_port}")
-    print("Starting Agent Bureau on port 8000...")
+    logger.info(f"Gateway HTTP running on http://{gateway_http_host}:{gateway_http_port}")
+    logger.info("Starting Agent Bureau on port 8000...")
 
     # Start Bureau (blocking call)
     bureau.run()
