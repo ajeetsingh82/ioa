@@ -2,13 +2,19 @@
 
 # --- STRATEGIST AGENT ---
 STRATEGIST_PROMPT = """
-Analyze the user query: '{query}'
-Generate a structured plan as a JSON array of 3-4 diverse tasks to answer the query.
-Each task must be a JSON object with "label" (a short, lowercase, single-word keyword for the knowledge bucket) 
-and "sub_query" (a specific, self-contained question for a search engine).
-Return ONLY the raw JSON array.
+You are the Strategist agent. Your goal is to break down the user query into structured research tasks.
 
-Example for "What is the future of AI?":
+User query: '{query}'
+
+Instructions:
+1. Generate 3-4 diverse tasks that fully address the query.
+2. Each task must be a JSON object with exactly two fields:
+   - "label": a short, lowercase, single-word keyword representing the knowledge category
+   - "sub_query": a precise, self-contained question suitable for a search or retrieval system
+3. Return ONLY a raw JSON array of these task objects. No explanations, no additional text.
+4. Ensure the JSON is valid and parsable.
+
+Example for query "What is the future of AI?":
 [
     {{"label": "history", "sub_query": "brief history of artificial intelligence"}},
     {{"label": "trends", "sub_query": "current trends in AI research 2024"}},
@@ -19,42 +25,76 @@ Example for "What is the future of AI?":
 
 # --- FILTER AGENT ---
 FILTER_PROMPT = """
-From the text below, extract all paragraphs and sentences relevant to the topic: '{label}'.
-If no relevant information is found, state that clearly.
+You are a specialized filter agent. Your task is to extract relevant information for a given label.
+
+Label: '{label}'
+
+Instructions:
+- Extract all paragraphs and sentences relevant to the label.
+- If no relevant information is found, explicitly return: "No relevant information found."
+- Return ONLY the extracted content; do not add explanations.
 """
 
 GENERAL_FILTER_PROMPT = """
-Summarize the key points from the following text in relation to the question: '{query}'.
-Focus on providing a comprehensive overview.
+You are a general filter agent. Your task is to summarize the key points from a body of text in relation to the user's question.
+
+User query: '{query}'
+
+Instructions:
+- Provide a concise and comprehensive summary of relevant information.
+- Structure your summary in clear bullet points.
+- Avoid adding personal opinions or unrelated context.
 """
 
 # --- ARCHITECT AGENT ---
 ARCHITECT_PROMPT = """
-Synthesize the provided information into a single, coherent, and well-written block of text.
-The user's original question was: {query}
-Use the following context, which has been gathered by specialized agents, to construct your answer.
-Each piece of context is separated by '---' and is categorized by a label.
-{context}
-Based on the context, provide a comprehensive synthesis. Do not add any conversational fluff or introductory phrases.
-If the context is insufficient, simply state that you could not find enough information.
+You are the Architect agent. Your goal is to synthesize gathered information into a single coherent answer.
+
+User query: '{query}'
+
+Instructions:
+1. Each context piece is separated by '---' and labeled by its category.
+2. Use all available context to construct a clear, factual, and concise answer.
+3. Return the output in JSON format as: 
+   {{
+       "answer": "<the synthesized text>"
+   }}
+4. If the context is insufficient, return: 
+   {{
+       "answer": "Insufficient information to answer the query."
+   }}
 """
 
 # --- USER PROXY (SPEAKER) AGENT ---
 SPEAKER_PROMPT = """
-You are the final output speaker for an AI assistant. Your job is to present the synthesized data to the user in a clear, helpful, and conversational manner.
-The user's original question was: {query}
-The synthesized data from the research agents is:
-{data}
+You are the final speaker for an AI assistant. Present the synthesized data to the user clearly.
 
-Format this data into a polished, easy-to-read answer. You can use markdown, bullet points, and code blocks.
-Address the user directly and answer their question.
+User query: '{query}'
+Synthesized data (JSON): {data}
+
+Instructions:
+1. Read the 'answer' field from the synthesized data.
+2. Format your response in markdown with headings, bullet points, or code blocks if appropriate.
+3. Address the user directly and clearly answer the question.
+4. Do not add unrelated commentary.
+5. Return the response as a JSON object:
+   {{
+       "text": "<formatted output>"
+   }}
 """
 
 FAILURE_PROMPT = """
-You are the output speaker for an AI assistant. The system was unable to find sufficient information to answer the user's question.
-The user's original question was: {query}
-Your task is to inform the user of the failure gracefully and suggest a next step.
-Ask a clarifying question or suggest a more specific topic.
+You are the assistant output speaker. The system could not find sufficient information.
+
+User query: '{query}'
+
+Instructions:
+- Gracefully inform the user of the failure.
+- Suggest a clarifying question or a more specific topic.
+- Return the response as a JSON object:
+  {{
+      "text": "<failure message>"
+  }}
 
 Example:
 "I wasn't able to find enough information about 'the future of AI'. Would you like me to try a more specific search, for example, on 'AI in healthcare' or 'AI in finance'?"

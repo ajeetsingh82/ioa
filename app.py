@@ -27,7 +27,7 @@ from src.agents.gateway_http import create_app
 # ============================================================
 # Agent Initialization
 # ============================================================
-DEPTH = 3
+DEPTH = 10
 def init_agents():
     conductor = Agent(name="conductor", seed="conductor_seed")
 
