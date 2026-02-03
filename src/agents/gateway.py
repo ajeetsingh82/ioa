@@ -1,23 +1,26 @@
-# The Gateway Agent: A pure messaging agent that forwards queries.
 from uagents import Agent, Context
-from ..model.models import UserQuery
+from queue import Queue
 
-# This is a standalone agent instance.
 gateway = Agent(
     name="gateway",
     seed="gateway_seed",
 )
 
-# This address will be configured from app.py after the strategist is created.
-gateway.strategist_address = None 
+gateway.strategist_address = None
+gateway.queue = Queue()
 
-@gateway.on_message(model=UserQuery)
-async def handle_user_query(ctx: Context, sender: str, msg: UserQuery):
-    """
-    Receives a UserQuery from the external server and forwards it to the Strategist.
-    """
-    if gateway.strategist_address:
-        ctx.logger.info(f"Gateway forwarding query {msg.request_id} to Strategist.")
-        await ctx.send(gateway.strategist_address, msg)
-    else:
-        ctx.logger.error("Strategist address not set on Gateway!")
+
+@gateway.on_event("startup")
+async def startup(ctx: Context):
+    ctx.logger.info("Gateway started")
+
+
+@gateway.on_interval(period=0.5)
+async def process_queue(ctx: Context):
+    while not gateway.queue.empty():
+        msg = gateway.queue.get()
+
+        if gateway.strategist_address:
+            await ctx.send(gateway.strategist_address, msg)
+        else:
+            ctx.logger.error("Strategist address not configured")

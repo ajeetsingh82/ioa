@@ -1,6 +1,6 @@
 # The User Proxy Agent: The "Speaker" and "Human Liaison"
 import os
-import requests
+import httpx
 from uagents import Context
 from .base import BaseAgent
 from ..model.models import ArchitectResponse
@@ -10,6 +10,7 @@ class UserProxy(BaseAgent):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
         self._agent_type = "user_proxy"
         self._queries = {} # Store original queries by request_id
+        self.on_message(model=ArchitectResponse)(self.handle_architect_response)
 
     def remember_query(self, request_id: str, query: str):
         """Stores the original user query for context."""
@@ -30,18 +31,22 @@ class UserProxy(BaseAgent):
             prompt = FAILURE_PROMPT.format(query=original_query)
             final_text = await self.think(context="", goal=prompt)
         
+
         # Read the chat server URL from environment every time
         chat_server_url = os.getenv("CHAT_SERVER_URL", "http://127.0.0.1:8080/api/result")
         
         ctx.logger.info(f"Formatted final answer for request {msg.request_id}. Sending to chat server at {chat_server_url}")
         
         try:
-            requests.post(chat_server_url, json={
-                "text": final_text,
-                "request_id": msg.request_id
-            })
-        except requests.exceptions.RequestException as e:
+            async with httpx.AsyncClient() as client:
+                await client.post(chat_server_url, json={
+                    "text": final_text,
+                    "request_id": msg.request_id
+                })
+        except httpx.RequestError as e:
             ctx.logger.error(f"Failed to send result to chat server: {e}")
+            # Log the final response to the console
+            ctx.logger.error(f"response for request {msg.request_id}:\n{final_text}")
 
         # Clean up the stored query
         if msg.request_id in self._queries:

@@ -1,6 +1,6 @@
 # This module defines the Base for all cognitive agents in the system.
 import os
-import requests
+import httpx
 from uagents import Agent, Context
 from ..model.models import AgentRegistration
 
@@ -29,15 +29,15 @@ class BaseAgent(Agent):
         prompt = f"### CONTEXT:\n{context}\n\n### TASK:\n{goal}\n\n### RESPONSE:"
         try:
             self._logger.info(f"Agent {self.name} is thinking...")
-            response = requests.post(
-                LLM_URL,
-                json={"model": LLM_MODEL, "prompt": prompt, "stream": False},
-                timeout=120
-            )
-            response.raise_for_status()
-            self._logger.info(f"Agent {self.name} finished thinking.")
-            return response.json().get('response', "").strip()
-        except requests.exceptions.RequestException as e:
+            async with httpx.AsyncClient(timeout=120.0) as client:
+                response = await client.post(
+                    LLM_URL,
+                    json={"model": LLM_MODEL, "prompt": prompt, "stream": False}
+                )
+                response.raise_for_status()
+                self._logger.info(f"Agent {self.name} finished thinking.")
+                return response.json().get('response', "").strip()
+        except httpx.RequestError as e:
             self._logger.error(f"Error connecting to LLM for agent {self.name}: {e}")
             return f"Error: Could not connect to the language model."
         except Exception as e:

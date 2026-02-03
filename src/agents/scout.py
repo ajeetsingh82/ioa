@@ -9,6 +9,7 @@ class ScoutAgent(Agent):
         self._agent_type = "scout"
         self._conductor_address = conductor_address
         self.on_event("startup")(self.register_on_startup)
+        self.on_message(model=ScoutRequest)(self.search)
 
     async def register_on_startup(self, ctx: Context):
         """Registers the scout with the Conductor on startup."""

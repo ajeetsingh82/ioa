@@ -96,13 +96,13 @@ async def submit_query(query: QueryRequest):
     return {"request_id": request_id, "status": "pending"}
 
 async def forward_to_bureau(request_id: str, text: str):
-    bureau_url = os.getenv("GATEWAY_ADDRESS", "http://127.0.0.1:8000/submit")
+    bureau_url = os.getenv("GATEWAY_ADDRESS", "http://127.0.0.1:9000/submit")
     try:
         response = await http_client.post(bureau_url, json={"text": text, "request_id": request_id})
         response.raise_for_status()
-        logger.info(f"Query forwarded to bureau: {request_id}")
+        logger.info(f"Query forwarded to bureau ({bureau_url}): {request_id}")
     except httpx.RequestError as e:
-        logger.error(f"Failed to forward query {request_id} to bureau: {e}")
+        logger.error(f"Failed to forward query {request_id} to bureau ({bureau_url}): {e}")
         async with state_lock:
             if request_id in pending_requests:
                 pending_requests[request_id]["status"] = "failed"

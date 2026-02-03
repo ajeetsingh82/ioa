@@ -9,6 +9,7 @@ class ArchitectAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
         self._agent_type = "architect"
+        self.on_message(model=ArchitectRequest)(self.synthesize_answer)
 
     async def synthesize_answer(self, ctx: Context, sender: str, msg: ArchitectRequest):
         """
