@@ -1,41 +1,66 @@
 # This module encapsulates all logic for managing cognitive task pipelines.
 import asyncio
-from typing import List, Dict, Any
+import uuid
+from typing import List, Dict, Any, Optional
+
+class PipelineStep:
+    """
+    Represents a single step in the execution pipeline.
+    """
+    def __init__(self, agent_type: str, content: str, metadata: Dict[str, str] = None, dependencies: List[str] = None):
+        self.id = str(uuid.uuid4())
+        self.agent_type = agent_type
+        self.content = content # The input for the agent
+        self.metadata = metadata or {}
+        self.dependencies = dependencies or [] # List of step IDs that must complete before this step
+        self.status = "PENDING" # PENDING, RUNNING, COMPLETED, FAILED
+        self.result: Optional[str] = None
 
 class Pipeline:
     """
     Manages the state and progression of a single user request's task pipeline.
-    This now includes separate queues for different stages of the process.
     """
-    def __init__(self, request_id: str, tasks: List[Dict[str, Any]], user_agent_address: str, original_query: str):
+    def __init__(self, request_id: str, original_query: str):
         self.request_id = request_id
-        
-        # The initial tasks from the Strategist are scout tasks
-        self.scout_tasks: List[Dict[str, Any]] = tasks
-        
-        self.total_tasks = len(tasks)
-        self.completed_tasks = 0
-        self.user_agent_address = user_agent_address
         self.original_query = original_query
-        self.all_labels = [task.get('label', 'general') for task in tasks]
+        self.steps: List[PipelineStep] = []
+        self.results: Dict[str, str] = {} # Map step_id -> result content
+        self.completed_steps = 0
 
-    def has_pending_scout_tasks(self) -> bool:
-        """Checks if there are tasks waiting for a Scout."""
-        return len(self.scout_tasks) > 0
+    def add_step(self, step: PipelineStep):
+        self.steps.append(step)
 
-    def get_next_scout_task(self) -> Dict[str, Any] | None:
-        """Pops the next scout task from the queue."""
-        if not self.scout_tasks:
-            return None
-        return self.scout_tasks.pop(0)
+    def get_executable_steps(self) -> List[PipelineStep]:
+        """Returns a list of steps that are PENDING and have all dependencies met."""
+        executable = []
+        for step in self.steps:
+            if step.status == "PENDING":
+                deps_met = all(dep_id in self.results for dep_id in step.dependencies)
+                if deps_met:
+                    executable.append(step)
+        return executable
 
-    def complete_task(self):
-        """Increments the completed task counter."""
-        self.completed_tasks += 1
+    def get_step(self, step_id: str) -> Optional[PipelineStep]:
+        for step in self.steps:
+            if step.id == step_id:
+                return step
+        return None
+
+    def mark_step_running(self, step_id: str):
+        step = self.get_step(step_id)
+        if step:
+            step.status = "RUNNING"
+
+    def mark_step_complete(self, step_id: str, result: str):
+        step = self.get_step(step_id)
+        if step:
+            step.status = "COMPLETED"
+            step.result = result
+            self.results[step_id] = result
+            self.completed_steps += 1
 
     def is_complete(self) -> bool:
-        """Checks if all tasks in the pipeline are complete."""
-        return self.completed_tasks >= self.total_tasks
+        return all(step.status == "COMPLETED" for step in self.steps)
 
 class PipelineManager:
     """
@@ -45,11 +70,12 @@ class PipelineManager:
         self._pipelines: Dict[str, Pipeline] = {}
         self._lock = asyncio.Lock()
 
-    async def create_pipeline(self, request_id: str, tasks: List[Dict[str, Any]], user_agent_address: str, original_query: str):
+    async def create_pipeline(self, request_id: str, original_query: str) -> Pipeline:
         """Creates and stores a new Pipeline instance."""
         async with self._lock:
-            if request_id not in self._pipelines:
-                self._pipelines[request_id] = Pipeline(request_id, tasks, user_agent_address, original_query)
+            pipeline = Pipeline(request_id, original_query)
+            self._pipelines[request_id] = pipeline
+            return pipeline
 
     async def get_pipeline(self, request_id: str) -> Pipeline | None:
         """Retrieves an active pipeline."""
@@ -61,11 +87,6 @@ class PipelineManager:
         async with self._lock:
             if request_id in self._pipelines:
                 del self._pipelines[request_id]
-
-    async def get_active_pipelines(self) -> List[Pipeline]:
-        """Returns a list of all pipelines that are not yet complete."""
-        async with self._lock:
-            return [p for p in self._pipelines.values() if not p.is_complete()]
 
 # Instantiate a single manager to be used by the orchestrator
 pipeline_manager = PipelineManager()

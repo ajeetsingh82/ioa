@@ -27,6 +27,7 @@ class FilterAgent(BaseAgent):
 
         label = msg.metadata.get("label", "general")
         original_query = msg.metadata.get("original_query", "")
+        metadata = msg.metadata.copy()
 
         ctx.logger.info(f"Filter agent received content for label: '{label}'")
 
@@ -55,5 +56,5 @@ class FilterAgent(BaseAgent):
             request_id=msg.request_id,
             type="FILTER",
             content="Task Completed",
-            metadata={"label": label}
+            metadata=metadata
         ))

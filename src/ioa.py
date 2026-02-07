@@ -8,6 +8,7 @@ from .agents.gateway import gateway
 from .agents.scout import AGENT_TYPE_RETRIEVE
 from .agents.filter import AGENT_TYPE_FILTER
 from .agents.architect import AGENT_TYPE_SYNTHESIZE
+from .utils.utils import to_msg_type
 
 class ConductorAgent(Agent):
     def __init__(self, name: str, seed: str):
@@ -32,76 +33,65 @@ class ConductorAgent(Agent):
             
         ctx.logger.info(f"Conductor received CognitiveMessage of type '{msg.type}' from a {sender_type} agent.")
 
-        if sender_type == AGENT_TYPE_RETRIEVE: # Response from Scout
-            agent_registry.release_agent(AGENT_TYPE_RETRIEVE, sender)
-            filter_addr = agent_registry.lease_agent(AGENT_TYPE_FILTER)
-            if filter_addr:
-                pipeline = await pipeline_manager.get_pipeline(msg.request_id)
-                if pipeline:
-                    gateway.remember_query(msg.request_id, pipeline.original_query)
-                    await ctx.send(
-                        filter_addr,
-                        CognitiveMessage(
-                            request_id=msg.request_id,
-                            type="FILTER",
-                            content=msg.content,
-                            metadata={
-                                "label": msg.metadata.get("label", "general"),
-                                "original_query": pipeline.original_query
-                            }
-                        )
-                    )
-            else:
-                ctx.logger.warning("No Filter agents available")
-            await self.process_pipeline_step(ctx, msg.request_id)
+        # Release the agent
+        if sender_type:
+            agent_registry.release_agent(sender_type, sender)
 
-        elif sender_type == AGENT_TYPE_FILTER: # Response from Filter
-            agent_registry.release_agent(AGENT_TYPE_FILTER, sender)
+        # If it's a response from Architect, forward to Gateway
+        if msg.type == "RESPONSE":
+             await ctx.send(gateway.address, msg)
+             await pipeline_manager.remove_pipeline(msg.request_id)
+             return
+
+        # Identify the step that completed
+        step_id = msg.metadata.get("step_id")
+        if step_id:
             pipeline = await pipeline_manager.get_pipeline(msg.request_id)
             if pipeline:
-                pipeline.complete_task()
-                if pipeline.is_complete():
-                    await self.trigger_architect(ctx, pipeline)
-
-        elif sender_type == AGENT_TYPE_SYNTHESIZE: # Response from Architect
-            agent_registry.release_agent(AGENT_TYPE_SYNTHESIZE, sender)
-            await ctx.send(gateway.address, msg)
-            await pipeline_manager.remove_pipeline(msg.request_id)
-        
-        # Add more routing logic here for other types like COMPUTE, etc.
+                pipeline.mark_step_complete(step_id, msg.content)
+                
+                # Special handling for RETRIEVE -> Gateway memory (legacy requirement?)
+                # If we want to keep the "remember query" logic, we can do it here if needed.
+                # But the new pipeline flow handles data passing via step results.
+                
+                await self.process_pipeline_step(ctx, msg.request_id)
+        else:
+            ctx.logger.warning(f"Received message without step_id from {sender_type}")
 
     async def process_pipeline_step(self, ctx: Context, request_id: str):
         pipeline = await pipeline_manager.get_pipeline(request_id)
-        if pipeline and pipeline.has_pending_scout_tasks():
-            scout_addr = agent_registry.lease_agent(AGENT_TYPE_RETRIEVE)
-            if scout_addr:
-                task = pipeline.get_next_scout_task()
+        if not pipeline:
+            return
+
+        executable_steps = pipeline.get_executable_steps()
+        for step in executable_steps:
+            agent_addr = agent_registry.lease_agent(step.agent_type)
+            if agent_addr:
+                # Resolve content if needed
+                content = step.content
+                if step.agent_type == AGENT_TYPE_FILTER:
+                    # Filter expects content from the previous step (Retrieve)
+                    if step.dependencies:
+                        dep_id = step.dependencies[0]
+                        content = pipeline.results.get(dep_id, "")
+                
+                # Prepare metadata
+                metadata = step.metadata.copy()
+                metadata["step_id"] = step.id
+                
+                # Determine message type
+                msg_type = to_msg_type(step.agent_type)
+                
+                pipeline.mark_step_running(step.id)
+                
                 await ctx.send(
-                    scout_addr,
+                    agent_addr,
                     CognitiveMessage(
                         request_id=pipeline.request_id,
-                        type="SEARCH",
-                        content=task["sub_query"],
-                        metadata={"label": task["label"]}
+                        type=msg_type,
+                        content=content,
+                        metadata=metadata
                     )
                 )
-
-    async def trigger_architect(self, ctx: Context, pipeline):
-        architect_addr = agent_registry.lease_agent(AGENT_TYPE_SYNTHESIZE)
-        if architect_addr:
-            # Convert list of labels to comma-separated string for metadata
-            labels_str = ",".join(pipeline.all_labels)
-            await ctx.send(
-                architect_addr,
-                CognitiveMessage(
-                    request_id=pipeline.request_id,
-                    type="SYNTHESIZE",
-                    content="", # Content is empty as Architect pulls from shared memory
-                    metadata={
-                        "original_query": pipeline.original_query,
-                        "labels": labels_str
-                    }
-                )
-            )
-        else:
-            ctx.logger.warning("Architect agent not available")
+            else:
+                ctx.logger.warning(f"No agents available for type {step.agent_type}")

@@ -2,9 +2,12 @@
 from uagents import Context
 from .base import BaseAgent
 from ..model.models import UserQuery, NewPipeline
-from ..pipeline import pipeline_manager
+from ..pipeline import pipeline_manager, PipelineStep
 from ..prompt.prompt import STRATEGIST_PROMPT
 from ..utils.json_parser import SafeJSONParser
+from .scout import AGENT_TYPE_RETRIEVE
+from .filter import AGENT_TYPE_FILTER
+from .architect import AGENT_TYPE_SYNTHESIZE
 
 # Instantiate the parser
 json_parser = SafeJSONParser()
@@ -43,7 +46,44 @@ class StrategistAgent(BaseAgent):
             if 'label' in task and isinstance(task['label'], str):
                 task['label'] = task['label'].strip('., ')
 
-        await pipeline_manager.create_pipeline(msg.request_id, tasks, sender, msg.text)
-        ctx.logger.info(f"Created pipeline for request {msg.request_id} with {len(tasks)} tasks.")
+        # Create the pipeline
+        pipeline = await pipeline_manager.create_pipeline(msg.request_id, msg.text)
+        
+        filter_step_ids = []
+        all_labels = []
+
+        for task in tasks:
+            label = task.get("label", "general")
+            sub_query = task.get("sub_query", msg.text)
+            all_labels.append(label)
+
+            # Step 1: RETRIEVE
+            retrieve_step = PipelineStep(
+                agent_type=AGENT_TYPE_RETRIEVE,
+                content=sub_query,
+                metadata={"label": label}
+            )
+            pipeline.add_step(retrieve_step)
+
+            # Step 2: FILTER (depends on RETRIEVE)
+            filter_step = PipelineStep(
+                agent_type=AGENT_TYPE_FILTER,
+                content="", # Content will be filled by the result of the previous step
+                metadata={"label": label, "original_query": msg.text},
+                dependencies=[retrieve_step.id]
+            )
+            pipeline.add_step(filter_step)
+            filter_step_ids.append(filter_step.id)
+
+        # Step 3: SYNTHESIZE (depends on all FILTER steps)
+        synthesize_step = PipelineStep(
+            agent_type=AGENT_TYPE_SYNTHESIZE,
+            content="", # Content will be filled by shared memory or results
+            metadata={"original_query": msg.text, "labels": ",".join(all_labels)},
+            dependencies=filter_step_ids
+        )
+        pipeline.add_step(synthesize_step)
+
+        ctx.logger.info(f"Created pipeline for request {msg.request_id} with {len(pipeline.steps)} steps.")
         
         await ctx.send(self._conductor_address, NewPipeline(request_id=msg.request_id))

@@ -28,6 +28,7 @@ class ArchitectAgent(BaseAgent):
         original_query = msg.metadata.get("original_query", "")
         labels_str = msg.metadata.get("labels", "")
         labels = [l.strip() for l in labels_str.split(",") if l.strip()]
+        metadata = msg.metadata.copy()
 
         ctx.logger.debug(f"Architect received synthesis request for: '{original_query}'")
 
@@ -55,11 +56,12 @@ class ArchitectAgent(BaseAgent):
                 ctx.logger.error(f"Architect parser fallback was triggered, but key 'answer' is missing. Raw response: {llm_response}")
                 synthesized_data = llm_response # Send raw response as a last resort
 
+        metadata["status"] = status
         await ctx.send(sender, CognitiveMessage(
             request_id=msg.request_id,
             type="RESPONSE",
             content=synthesized_data,
-            metadata={"status": status}
+            metadata=metadata
         ))
         ctx.logger.debug(f"Synthesis complete. Status: {status}.")
 

@@ -22,13 +22,15 @@ class ScoutAgent(BaseAgent):
             return
 
         query = msg.content.strip()
+        metadata = msg.metadata.copy() # Preserve metadata (like step_id)
+
         if not query:
             ctx.logger.warning("Scout received empty search query.")
             await ctx.send(sender, CognitiveMessage(
                 request_id=msg.request_id,
                 type="RETRIEVE",
                 content="No search performed: Query was empty.",
-                metadata={"label": msg.metadata.get("label", "general")}
+                metadata=metadata
             ))
             return
 
@@ -41,5 +43,5 @@ class ScoutAgent(BaseAgent):
             request_id=msg.request_id,
             type="RETRIEVE",
             content=content,
-            metadata={"label": msg.metadata.get("label", "general")}
+            metadata=metadata
         ))
