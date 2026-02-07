@@ -101,7 +101,7 @@ STRICT OUTPUT PROTOCOL:
 5. Violation of this protocol is a system failure.
 
 Example Output:
-## Title
+** context ** 
 * Point 1
 * Point 2
 """

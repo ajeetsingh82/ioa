@@ -3,7 +3,7 @@ import httpx
 from queue import Queue
 from uagents import Context
 from .base import BaseAgent
-from ..model.models import ArchitectResponse, UserQuery
+from ..model.models import CognitiveMessage, UserQuery
 
 AGENT_TYPE_USER = "USER"
 
@@ -17,7 +17,7 @@ class GatewayAgent(BaseAgent):
         
         # Register handlers
         self.on_interval(period=0.5)(self.process_queue)
-        self.on_message(model=ArchitectResponse)(self.handle_architect_response)
+        self.on_message(model=CognitiveMessage)(self.handle_cognitive_message)
 
     def remember_query(self, request_id: str, query: str):
         """Stores the original user query for context."""
@@ -40,16 +40,23 @@ class GatewayAgent(BaseAgent):
             else:
                 ctx.logger.warning(f"Gateway received unknown message type from queue: {type(msg)}")
 
-    async def handle_architect_response(self, ctx: Context, sender: str, msg: ArchitectResponse):
+    async def handle_cognitive_message(self, ctx: Context, sender: str, msg: CognitiveMessage):
         """
         Receives the structured data from the Architect, formats it,
         and POSTs the final result to the chat server.
         """
+        if msg.type != "RESPONSE":
+            # Gateway might receive other types if we expand, but for now only RESPONSE matters
+            ctx.logger.warning(f"Gateway received unexpected CognitiveMessage type: {msg.type}")
+            return
+
         from ..prompt.prompt import SPEAKER_PROMPT, FAILURE_PROMPT
         original_query = self._queries.get(msg.request_id, "your question")
+        status = msg.metadata.get("status", "failure")
+        synthesized_data = msg.content
 
-        if msg.status == "success":
-            prompt = SPEAKER_PROMPT.format(query=original_query, data=msg.synthesized_data)
+        if status == "success":
+            prompt = SPEAKER_PROMPT.format(query=original_query, data=synthesized_data)
         else:
             prompt = FAILURE_PROMPT.format(query=original_query)
             

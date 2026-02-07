@@ -8,11 +8,6 @@ class AgentRegistration(Model):
     """Message to register an agent with the registry."""
     agent_type: str
 
-class TaskCompletion(Model):
-    """Generic message to signal the completion of a task."""
-    request_id: str
-    label: str
-
 class NewPipeline(Model):
     """Signal from the Strategist to the Conductor that a new pipeline is ready."""
     request_id: str
@@ -49,43 +44,3 @@ class UserQuery(Model):
 class DisplayResponse(Model):
     """The final, formatted response sent to the user's screen."""
     text: str
-
-# --- Legacy Models (To be deprecated) ---
-
-class ScoutRequest(Model):
-    request_id: str
-    sub_query: str
-    label: str
-
-class ScoutResponse(Model):
-    request_id: str
-    content: str
-    label: str
-
-class FilterRequest(Model):
-    request_id: str
-    content: str
-    label: str
-    original_query: str
-
-class ArchitectRequest(Model):
-    request_id: str
-    original_query: str
-    labels: List[str]
-
-class ArchitectResponse(Model):
-    request_id: str
-    status: str
-    synthesized_data: str
-
-class CodeExecutionRequest(Model):
-    request_id: str
-    code: str
-    timeout: int = 5
-
-class CodeExecutionResponse(Model):
-    request_id: str
-    stdout: str
-    stderr: str
-    exit_code: int
-    status: str

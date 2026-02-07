@@ -1,7 +1,7 @@
 # The Filter Agent: The "Semantic Sieve"
 from uagents import Context
 from .base import BaseAgent
-from ..model.models import CognitiveMessage, TaskCompletion
+from ..model.models import CognitiveMessage
 from ..cognition.cognition import shared_memory
 from ..prompt.prompt import FILTER_PROMPT, GENERAL_FILTER_PROMPT
 from ..utils.json_parser import SafeJSONParser
