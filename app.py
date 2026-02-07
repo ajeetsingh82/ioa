@@ -20,10 +20,9 @@ from src.agents.strategist import StrategistAgent
 from src.agents.scout import ScoutAgent
 from src.agents.filter import FilterAgent
 from src.agents.architect import ArchitectAgent
-from src.agents.user_proxy import UserProxy
 
 # HTTP gateway imports
-from src.agents.gateway_http import create_app
+from gateway_http import create_app
 
 # ============================================================
 # Agent Initialization
@@ -62,16 +61,11 @@ def init_agents():
         conductor_address=conductor.address,
     )
 
-    user_proxy = UserProxy(
-        name="user_proxy",
-        seed="user_proxy_seed",
-        conductor_address=conductor.address,
-    )
-
     # Configure gateway
     gateway.strategist_address = strategist.address
+    gateway._conductor_address = conductor.address # Manually set conductor address for BaseAgent registration
 
-    return conductor, strategist, scouts, filters, architect, user_proxy
+    return conductor, strategist, scouts, filters, architect
 
 
 # ============================================================
@@ -95,7 +89,7 @@ def register_conductor_handlers(conductor: Agent):
         if filter_addr:
             pipeline = await pipeline_manager.get_pipeline(msg.request_id)
             if pipeline:
-                user_proxy.remember_query(msg.request_id, pipeline.original_query)
+                gateway.remember_query(msg.request_id, pipeline.original_query)
                 await ctx.send(
                     filter_addr,
                     FilterRequest(
@@ -121,7 +115,7 @@ def register_conductor_handlers(conductor: Agent):
     @conductor.on_message(model=ArchitectResponse)
     async def handle_architect_response(ctx: Context, sender: str, msg: ArchitectResponse):
         agent_registry.release_agent("architect", sender)
-        await ctx.send(user_proxy.address, msg)
+        await ctx.send(gateway.address, msg)
         await pipeline_manager.remove_pipeline(msg.request_id)
 
 
@@ -195,7 +189,7 @@ if __name__ == "__main__":
     os.environ["CHAT_SERVER_URL"] = "http://127.0.0.1:8080/api/result"
 
     # Initialize agents
-    conductor, strategist, scouts, filters, architect, user_proxy = init_agents()
+    conductor, strategist, scouts, filters, architect = init_agents()
 
     # Register conductor handlers
     register_conductor_handlers(conductor)
@@ -206,7 +200,6 @@ if __name__ == "__main__":
     bureau.add(gateway)
     bureau.add(strategist)
     bureau.add(architect)
-    bureau.add(user_proxy)
 
     for agent in scouts:
         bureau.add(agent)
