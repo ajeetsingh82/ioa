@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from ..model.models import UserQuery
+from model.models import UserQuery
 from queue import Queue
 
 def create_app(queue: Queue):
