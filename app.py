@@ -20,6 +20,7 @@ from src.agents.strategist import StrategistAgent
 from src.agents.scout import ScoutAgent
 from src.agents.filter import FilterAgent
 from src.agents.architect import ArchitectAgent
+from src.agents.program_of_thought import ProgramOfThoughtAgent
 
 # HTTP gateway imports
 from gateway_http import create_app
@@ -61,11 +62,17 @@ def init_agents():
         conductor_address=conductor.address,
     )
 
+    program_of_thought = ProgramOfThoughtAgent(
+        name="program_of_thought",
+        seed="program_of_thought_seed",
+        conductor_address=conductor.address,
+    )
+
     # Configure gateway
     gateway.strategist_address = strategist.address
     gateway._conductor_address = conductor.address # Manually set conductor address for BaseAgent registration
 
-    return conductor, strategist, scouts, filters, architect
+    return conductor, strategist, scouts, filters, architect, program_of_thought
 
 
 # ============================================================
@@ -189,7 +196,7 @@ if __name__ == "__main__":
     os.environ["CHAT_SERVER_URL"] = "http://127.0.0.1:8080/api/result"
 
     # Initialize agents
-    conductor, strategist, scouts, filters, architect = init_agents()
+    conductor, strategist, scouts, filters, architect, program_of_thought = init_agents()
 
     # Register conductor handlers
     register_conductor_handlers(conductor)
@@ -200,6 +207,7 @@ if __name__ == "__main__":
     bureau.add(gateway)
     bureau.add(strategist)
     bureau.add(architect)
+    bureau.add(program_of_thought)
 
     for agent in scouts:
         bureau.add(agent)

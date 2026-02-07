@@ -69,3 +69,19 @@ class ArchitectResponse(Model):
     request_id: str
     status: str  # "success" or "failure"
     synthesized_data: str
+
+# --- Program of Thought Models ---
+
+class CodeExecutionRequest(Model):
+    """Request to execute Python code."""
+    request_id: str
+    code: str
+    timeout: int = 5
+
+class CodeExecutionResponse(Model):
+    """Response containing the execution result."""
+    request_id: str
+    stdout: str
+    stderr: str
+    exit_code: int
+    status: str # "success", "error", "timeout"
