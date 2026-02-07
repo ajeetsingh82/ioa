@@ -5,10 +5,12 @@ from uagents import Context
 from .base import BaseAgent
 from ..model.models import ArchitectResponse, UserQuery
 
+AGENT_TYPE_USER = "USER"
+
 class GatewayAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str = None):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
-        self._agent_type = "gateway"
+        self.type = AGENT_TYPE_USER
         self.queue = Queue()
         self.strategist_address = None
         self._queries = {} # Store original queries by request_id

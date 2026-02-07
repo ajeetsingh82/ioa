@@ -9,13 +9,15 @@ from typing import Optional
 LLM_URL = os.getenv("LLM_URL", "http://localhost:11434/api/generate")
 LLM_MODEL = os.getenv("LLM_MODEL", "llama3.2:1b")
 
+AGENT_TYPE_BASE = "BASE"
+
 class BaseAgent(Agent):
     """
     The BaseAgent provides core cognitive abilities and autonomous registration.
     """
     def __init__(self, name: str, seed: str, port: int = 0, conductor_address: str = None):
         super().__init__(name=name, seed=seed, port=port)
-        self._agent_type = "base"
+        self.type = AGENT_TYPE_BASE # Default type
         self._conductor_address = conductor_address
         self._http_client: Optional[httpx.AsyncClient] = None
         
@@ -39,8 +41,8 @@ class BaseAgent(Agent):
         """All agents inheriting from BaseAgent will register themselves on startup."""
         if self._conductor_address:
             # This is a high-level event, so INFO is appropriate here.
-            self._logger.info(f"Registering {self._agent_type} agent '{self.name}' with Conductor.")
-            await ctx.send(self._conductor_address, AgentRegistration(agent_type=self._agent_type))
+            self._logger.info(f"Registering {self.type} agent '{self.name}' with Conductor.")
+            await ctx.send(self._conductor_address, AgentRegistration(agent_type=self.type))
 
     async def think(self, context: str, goal: str) -> str:
         """The core cognitive loop for any agent that inherits this class."""

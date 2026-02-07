@@ -1,7 +1,7 @@
 # The Filter Agent: The "Semantic Sieve"
 from uagents import Context
 from .base import BaseAgent
-from ..model.models import FilterRequest, TaskCompletion
+from ..model.models import CognitiveMessage, TaskCompletion
 from ..cognition.cognition import shared_memory
 from ..prompt.prompt import FILTER_PROMPT, GENERAL_FILTER_PROMPT
 from ..utils.json_parser import SafeJSONParser
@@ -9,22 +9,31 @@ from ..utils.json_parser import SafeJSONParser
 # Instantiate the parser
 json_parser = SafeJSONParser()
 
+AGENT_TYPE_FILTER = "FILTER"
+
 class FilterAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
-        self._agent_type = "filter"
-        self.on_message(model=FilterRequest)(self.filter_content)
+        self.type = AGENT_TYPE_FILTER
+        self.on_message(model=CognitiveMessage)(self.filter_content)
 
-    async def filter_content(self, ctx: Context, sender: str, msg: FilterRequest):
+    async def filter_content(self, ctx: Context, sender: str, msg: CognitiveMessage):
         """
         Filters raw content using its cognitive ability and stores the result.
         """
-        ctx.logger.info(f"Filter agent received content for label: '{msg.label}'")
+        if msg.type != "FILTER":
+            ctx.logger.warning(f"Filter received unknown message type: {msg.type}")
+            return
 
-        if msg.label != "general":
-            prompt = FILTER_PROMPT.format(label=msg.label)
+        label = msg.metadata.get("label", "general")
+        original_query = msg.metadata.get("original_query", "")
+
+        ctx.logger.info(f"Filter agent received content for label: '{label}'")
+
+        if label != "general":
+            prompt = FILTER_PROMPT.format(label=label)
         else:
-            prompt = GENERAL_FILTER_PROMPT.format(query=msg.original_query)
+            prompt = GENERAL_FILTER_PROMPT.format(query=original_query)
 
         llm_response = await self.think(context=msg.content, goal=prompt)
         response_json = json_parser.parse(llm_response)
@@ -39,6 +48,12 @@ class FilterAgent(BaseAgent):
 
         ctx.logger.info(f"Filtered content. Original length: {len(msg.content)}, New length: {len(filtered_content)}")
 
-        shared_memory.set(f"{msg.request_id}:{msg.label}", filtered_content)
+        shared_memory.set(f"{msg.request_id}:{label}", filtered_content)
         
-        await ctx.send(sender, TaskCompletion(request_id=msg.request_id, label=msg.label))
+        # Send a CognitiveMessage back to signal completion
+        await ctx.send(sender, CognitiveMessage(
+            request_id=msg.request_id,
+            type="FILTER",
+            content="Task Completed",
+            metadata={"label": label}
+        ))

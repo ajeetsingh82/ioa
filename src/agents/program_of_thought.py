@@ -5,12 +5,12 @@ from uagents import Context
 from .base import BaseAgent
 from ..model.models import CodeExecutionRequest, CodeExecutionResponse
 
-PYTHON  = "python3.12"
-#TODO move this to docker service that executes code
+AGENT_TYPE_COMPUTE = "COMPUTE"
+
 class ProgramOfThoughtAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
-        self._agent_type = "program_of_thought"
+        self.type = AGENT_TYPE_COMPUTE
         self.on_message(model=CodeExecutionRequest)(self.execute_code)
 
     async def execute_code(self, ctx: Context, sender: str, msg: CodeExecutionRequest):
@@ -28,7 +28,7 @@ class ProgramOfThoughtAgent(BaseAgent):
             # Execute the code
             try:
                 result = subprocess.run(
-                    [PYTHON, temp_file_path],
+                    ["python3", temp_file_path],
                     capture_output=True,
                     text=True,
                     timeout=msg.timeout

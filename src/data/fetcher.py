@@ -11,6 +11,10 @@ def search_web(query: str, max_results: int = 3) -> str:
     Performs a web search using DuckDuckGo and returns the concatenated
     content of the top search results as cleaned text.
     """
+    if not query or not query.strip():
+        logger.warning("Web search requested with empty query.")
+        return "No search performed: Query was empty."
+
     logger.debug(f"Performing web search for: '{query}'")
     
     try:

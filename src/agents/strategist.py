@@ -9,10 +9,12 @@ from ..utils.json_parser import SafeJSONParser
 # Instantiate the parser
 json_parser = SafeJSONParser()
 
+AGENT_TYPE_PLANNER = "PLANNER"
+
 class StrategistAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
-        self._agent_type = "strategist"
+        self.type = AGENT_TYPE_PLANNER
         self.on_message(model=UserQuery)(self.handle_user_query)
 
     async def handle_user_query(self, ctx: Context, sender: str, msg: UserQuery):

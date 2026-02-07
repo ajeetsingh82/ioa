@@ -1,5 +1,5 @@
 from uagents import Model
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uuid
 
 # --- Core Agentic Models ---
@@ -17,6 +17,23 @@ class NewPipeline(Model):
     """Signal from the Strategist to the Conductor that a new pipeline is ready."""
     request_id: str
 
+# --- Generic Cognitive Model ---
+
+class CognitiveMessage(Model):
+    """
+    A unified message model for all agent-to-agent communication.
+    
+    Attributes:
+        request_id: The correlation ID for the user query.
+        type: The intent or action type (e.g., "SEARCH", "FILTER", "SYNTHESIZE", "CODE_EXEC").
+        content: The main payload (query, text, code, etc.).
+        metadata: Additional context (labels, original query, etc.).
+    """
+    request_id: str
+    type: str 
+    content: str
+    metadata: Dict[str, str] = {}
+
 # --- User Interaction Models ---
 
 class UserQuery(Model):
@@ -33,55 +50,42 @@ class DisplayResponse(Model):
     """The final, formatted response sent to the user's screen."""
     text: str
 
-# --- Scout Agent Models ---
+# --- Legacy Models (To be deprecated) ---
 
 class ScoutRequest(Model):
-    """Message from the Conductor to a Scout agent."""
     request_id: str
     sub_query: str
     label: str
 
 class ScoutResponse(Model):
-    """Message from a Scout agent back to the Conductor."""
     request_id: str
     content: str
     label: str
 
-# --- Filter Agent Models ---
-
 class FilterRequest(Model):
-    """Message from the Conductor to a Filter agent."""
     request_id: str
     content: str
     label: str
     original_query: str
 
-# --- Architect Agent Models ---
-
 class ArchitectRequest(Model):
-    """Message from the Conductor to the Architect agent."""
     request_id: str
     original_query: str
     labels: List[str]
 
 class ArchitectResponse(Model):
-    """Structured response from the Architect to the User Proxy."""
     request_id: str
-    status: str  # "success" or "failure"
+    status: str
     synthesized_data: str
 
-# --- Program of Thought Models ---
-
 class CodeExecutionRequest(Model):
-    """Request to execute Python code."""
     request_id: str
     code: str
     timeout: int = 5
 
 class CodeExecutionResponse(Model):
-    """Response containing the execution result."""
     request_id: str
     stdout: str
     stderr: str
     exit_code: int
-    status: str # "success", "error", "timeout"
+    status: str
