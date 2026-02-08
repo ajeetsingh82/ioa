@@ -1,4 +1,4 @@
-agent_type: retrieve
+agent_type: scout
 prompts:
   - name: default
     text: |

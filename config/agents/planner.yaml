@@ -59,7 +59,7 @@ schemas:
       graph:
         nodes:
           - id: "0"
-            type: "retrieve"
+            type: "scout"
             description: "retrieve data from web interface against user query"
           - id: "1"
             type: "filter"

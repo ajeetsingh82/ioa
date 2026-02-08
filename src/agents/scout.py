@@ -6,12 +6,12 @@ from ..model.models import Thought, AgentGoal, AgentGoalType, ThoughtType
 from ..data.fetcher import search_web
 from ..cognition.cognition import shared_memory
 
-AGENT_TYPE_RETRIEVE = "retrieve"
+AGENT_TYPE_SCOUT = "scout"
 
 class ScoutAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str = None):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
-        self.type = AGENT_TYPE_RETRIEVE
+        self.type = AGENT_TYPE_SCOUT
         self.on_message(model=AgentGoal)(self.queued_handler(self.process_search))
 
     async def process_search(self, ctx: Context, sender: str, msg: AgentGoal):
