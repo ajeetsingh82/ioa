@@ -21,7 +21,7 @@ gateway_http_port = 9000
 
 
 def run_gateway_http():
-    app = create_app(gateway.queue)
+    app = create_app(gateway.thought_queue)
     uvicorn.run(
         app,
         host=gateway_http_host,

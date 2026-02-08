@@ -3,7 +3,7 @@ import tempfile
 import os
 from uagents import Context
 from .base import BaseAgent
-from ..model.models import CognitiveMessage
+from ..model.models import Thought
 
 AGENT_TYPE_COMPUTE = "COMPUTE"
 
@@ -11,9 +11,9 @@ class ProgramOfThoughtAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
         self.type = AGENT_TYPE_COMPUTE
-        self.on_message(model=CognitiveMessage)(self.execute_code)
+        self.on_message(model=Thought)(self.execute_code)
 
-    async def execute_code(self, ctx: Context, sender: str, msg: CognitiveMessage):
+    async def execute_code(self, ctx: Context, sender: str, msg: Thought):
         """
         Executes the provided Python code in a subprocess and returns the output.
         """
@@ -25,6 +25,7 @@ class ProgramOfThoughtAgent(BaseAgent):
         
         code = msg.content
         timeout = int(msg.metadata.get("timeout", "5"))
+        metadata = msg.metadata.copy()
 
         # Create a temporary file for the code
         try:
@@ -43,40 +44,38 @@ class ProgramOfThoughtAgent(BaseAgent):
                 
                 status = "success" if result.returncode == 0 else "error"
                 
-                response = CognitiveMessage(
+                metadata["stderr"] = result.stderr
+                metadata["exit_code"] = str(result.returncode)
+                metadata["status"] = status
+
+                response = Thought(
                     request_id=msg.request_id,
                     type="CODE_RESULT",
                     content=result.stdout,
-                    metadata={
-                        "stderr": result.stderr,
-                        "exit_code": str(result.returncode),
-                        "status": status
-                    }
+                    metadata=metadata
                 )
                 
             except subprocess.TimeoutExpired:
                 ctx.logger.warning(f"Code execution timed out for request {msg.request_id}")
-                response = CognitiveMessage(
+                metadata["stderr"] = "Execution timed out."
+                metadata["exit_code"] = "-1"
+                metadata["status"] = "timeout"
+                response = Thought(
                     request_id=msg.request_id,
                     type="CODE_RESULT",
                     content="",
-                    metadata={
-                        "stderr": "Execution timed out.",
-                        "exit_code": "-1",
-                        "status": "timeout"
-                    }
+                    metadata=metadata
                 )
             except Exception as e:
                 ctx.logger.error(f"Error executing code for request {msg.request_id}: {e}")
-                response = CognitiveMessage(
+                metadata["stderr"] = str(e)
+                metadata["exit_code"] = "-1"
+                metadata["status"] = "error"
+                response = Thought(
                     request_id=msg.request_id,
                     type="CODE_RESULT",
                     content="",
-                    metadata={
-                        "stderr": str(e),
-                        "exit_code": "-1",
-                        "status": "error"
-                    }
+                    metadata=metadata
                 )
             finally:
                 # Clean up the temporary file
@@ -85,15 +84,14 @@ class ProgramOfThoughtAgent(BaseAgent):
 
         except Exception as e:
              ctx.logger.error(f"Failed to create temporary file for request {msg.request_id}: {e}")
-             response = CognitiveMessage(
+             metadata["stderr"] = f"System error: {str(e)}"
+             metadata["exit_code"] = "-1"
+             metadata["status"] = "error"
+             response = Thought(
                 request_id=msg.request_id,
                 type="CODE_RESULT",
                 content="",
-                metadata={
-                    "stderr": f"System error: {str(e)}",
-                    "exit_code": "-1",
-                    "status": "error"
-                }
+                metadata=metadata
             )
 
         await ctx.send(sender, response)

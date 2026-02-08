@@ -14,7 +14,7 @@ class NewPipeline(Model):
 
 # --- Generic Cognitive Model ---
 
-class CognitiveMessage(Model):
+class Thought(Model):
     """
     A unified message model for all agent-to-agent communication.
     

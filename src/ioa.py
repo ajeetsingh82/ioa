@@ -2,7 +2,7 @@ from uagents import Agent, Context
 from .agent_registry import agent_registry
 from .pipeline import pipeline_manager
 from .model.models import (
-    AgentRegistration, NewPipeline, CognitiveMessage
+    AgentRegistration, NewPipeline, Thought
 )
 from .agents.gateway import gateway
 from .agents.scout import AGENT_TYPE_RETRIEVE
@@ -15,7 +15,7 @@ class ConductorAgent(Agent):
         super().__init__(name=name, seed=seed)
         self.on_message(model=AgentRegistration)(self.handle_agent_registration)
         self.on_message(model=NewPipeline)(self.on_new_pipeline)
-        self.on_message(model=CognitiveMessage)(self.handle_cognitive_message)
+        self.on_message(model=Thought)(self.handle_thought)
 
     async def handle_agent_registration(self, ctx: Context, sender: str, msg: AgentRegistration):
         agent_registry.register(msg.agent_type, sender)
@@ -23,7 +23,7 @@ class ConductorAgent(Agent):
     async def on_new_pipeline(self, ctx: Context, sender: str, msg: NewPipeline):
         await self.process_pipeline_step(ctx, msg.request_id)
 
-    async def handle_cognitive_message(self, ctx: Context, sender: str, msg: CognitiveMessage):
+    async def handle_thought(self, ctx: Context, sender: str, msg: Thought):
         """
         Handles all cognitive messages and routes them based on type.
         """
@@ -31,7 +31,7 @@ class ConductorAgent(Agent):
         if sender_type:
             sender_type = sender_type.upper()
             
-        ctx.logger.info(f"Conductor received CognitiveMessage of type '{msg.type}' from a {sender_type} agent.")
+        ctx.logger.info(f"Conductor received Thought of type '{msg.type}' from a {sender_type} agent.")
 
         # Release the agent
         if sender_type:
@@ -86,7 +86,7 @@ class ConductorAgent(Agent):
                 
                 await ctx.send(
                     agent_addr,
-                    CognitiveMessage(
+                    Thought(
                         request_id=pipeline.request_id,
                         type=msg_type,
                         content=content,

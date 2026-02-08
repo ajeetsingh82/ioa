@@ -1,7 +1,7 @@
 # The Filter Agent: The "Semantic Sieve"
 from uagents import Context
 from .base import BaseAgent
-from ..model.models import CognitiveMessage
+from ..model.models import Thought
 from ..cognition.cognition import shared_memory
 from ..prompt.prompt import FILTER_PROMPT, GENERAL_FILTER_PROMPT
 from ..utils.json_parser import SafeJSONParser
@@ -15,9 +15,9 @@ class FilterAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
         self.type = AGENT_TYPE_FILTER
-        self.on_message(model=CognitiveMessage)(self.filter_content)
+        self.on_message(model=Thought)(self.filter_content)
 
-    async def filter_content(self, ctx: Context, sender: str, msg: CognitiveMessage):
+    async def filter_content(self, ctx: Context, sender: str, msg: Thought):
         """
         Filters raw content using its cognitive ability and stores the result.
         """
@@ -51,8 +51,8 @@ class FilterAgent(BaseAgent):
 
         shared_memory.set(f"{msg.request_id}:{label}", filtered_content)
         
-        # Send a CognitiveMessage back to signal completion
-        await ctx.send(sender, CognitiveMessage(
+        # Send a Thought back to signal completion
+        await ctx.send(sender, Thought(
             request_id=msg.request_id,
             type="FILTER",
             content="Task Completed",

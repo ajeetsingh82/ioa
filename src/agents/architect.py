@@ -1,7 +1,7 @@
 # The Architect Agent: The "Synthesis" or "Reduce" phase.
 from uagents import Context
 from .base import BaseAgent
-from ..model.models import CognitiveMessage
+from ..model.models import Thought
 from ..cognition.cognition import shared_memory
 from ..prompt.prompt import ARCHITECT_PROMPT
 from ..utils.json_parser import SafeJSONParser
@@ -15,9 +15,9 @@ class ArchitectAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
         self.type = AGENT_TYPE_SYNTHESIZE
-        self.on_message(model=CognitiveMessage)(self.synthesize_answer)
+        self.on_message(model=Thought)(self.synthesize_answer)
 
-    async def synthesize_answer(self, ctx: Context, sender: str, msg: CognitiveMessage):
+    async def synthesize_answer(self, ctx: Context, sender: str, msg: Thought):
         """
         Assembles data from working memory and synthesizes it into a factual block.
         """
@@ -57,7 +57,7 @@ class ArchitectAgent(BaseAgent):
                 synthesized_data = llm_response # Send raw response as a last resort
 
         metadata["status"] = status
-        await ctx.send(sender, CognitiveMessage(
+        await ctx.send(sender, Thought(
             request_id=msg.request_id,
             type="RESPONSE",
             content=synthesized_data,
