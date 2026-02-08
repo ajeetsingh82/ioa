@@ -26,7 +26,7 @@ gateway_http_port = 9000
 
 
 def run_gateway_http():
-    app = create_app(gateway.thought_queue)
+    app = create_app(gateway.query_queue)
     uvicorn.run(
         app,
         host=gateway_http_host,
@@ -49,10 +49,10 @@ if __name__ == "__main__":
 
     # Set environment variables for UserProxy / UI
     os.environ["GATEWAY_ADDRESS"] = f"http://{gateway_http_host}:{gateway_http_port}/submit"
-    os.environ["CHAT_SERVER_URL"] = "http://127.0.0.1:8080/api/result"
+    os.environ["CHAT_SERVER_URL"] = "http://localhost:8080/api/result"
 
     # Initialize agents
-    conductor, strategist, scouts, filters, architect, program_of_thought = init_agents()
+    conductor, strategist, scout, filter_agent, architect, program_of_thought = init_agents()
 
     # Create Bureau
     bureau = Bureau(port=8000)
@@ -61,11 +61,8 @@ if __name__ == "__main__":
     bureau.add(strategist)
     bureau.add(architect)
     bureau.add(program_of_thought)
-
-    for agent in scouts:
-        bureau.add(agent)
-    for agent in filters:
-        bureau.add(agent)
+    bureau.add(scout)
+    bureau.add(filter_agent)
 
     # Start HTTP server in background thread
     http_thread = threading.Thread(target=run_gateway_http, daemon=True)

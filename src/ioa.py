@@ -1,96 +1,84 @@
 from uagents import Agent, Context
 
-from .agents.filter import AGENT_TYPE_FILTER
+from .agents.planner import AGENT_TYPE_PLANNER
 from .agent_registry import agent_registry
-from .pipeline import pipeline_manager
 from .model.models import (
-    AgentRegistration, NewPipeline, Thought
+    AgentRegistration, Thought, AgentGoal, UserQuery, ReplanRequest,
+    AgentGoalType, ThoughtType
 )
-from .agents.gateway import gateway
-from .utils.utils import to_msg_type
+from .cognition.cognition import shared_memory
+from .orchestrator import orchestrator
 
 class ConductorAgent(Agent):
+    """
+    The ConductorAgent acts as the central message router for the system.
+    It receives user queries and thoughts from other agents and delegates
+    the actual execution logic to the Orchestrator. It also handles
+    requests to re-plan when a graph execution fails.
+    """
     def __init__(self, name: str, seed: str):
         super().__init__(name=name, seed=seed)
         self.on_message(model=AgentRegistration)(self.handle_agent_registration)
-        self.on_message(model=NewPipeline)(self.on_new_pipeline)
         self.on_message(model=Thought)(self.handle_thought)
+        self.on_message(model=UserQuery)(self.handle_user_query)
+        self.on_message(model=ReplanRequest)(self.handle_replan_request)
+        self.on_event("startup")(self.register_self)
+
+    async def register_self(self, ctx: Context):
+        """Registers the Conductor with the central registry on startup."""
+        agent_registry.register("conductor", self.address)
+        ctx.logger.info(f"Conductor registered at {self.address}")
 
     async def handle_agent_registration(self, ctx: Context, sender: str, msg: AgentRegistration):
+        """Handles registration requests from other agents."""
         agent_registry.register(msg.agent_type, sender)
 
-    async def on_new_pipeline(self, ctx: Context, sender: str, msg: NewPipeline):
-        await self.process_pipeline_step(ctx, msg.request_id)
+    async def handle_user_query(self, ctx: Context, sender: str, msg: UserQuery):
+        """Handles the initial user query by storing it and dispatching a PLAN goal."""
+        ctx.logger.info(f"Conductor received user query: '{msg.text}'")
+        shared_memory.set(f"{msg.request_id}:query", msg.text)
+        await self._request_new_plan(ctx, msg.request_id)
 
     async def handle_thought(self, ctx: Context, sender: str, msg: Thought):
-        """
-        Handles all cognitive messages and routes them based on type.
-        """
-        sender_type = agent_registry.get_agent_type(sender)
-        if sender_type:
-            sender_type = sender_type.upper()
-            
-        ctx.logger.info(f"Conductor received Thought of type '{msg.type}' from a {sender_type} agent.")
+        """Delegates incoming thoughts to the appropriate handler in the orchestrator."""
+        ctx.logger.info(f"Conductor received Thought of type '{msg.type}' from agent {sender}")
 
-        # Release the agent
-        if sender_type:
-            agent_registry.release_agent(sender_type, sender)
-
-        # If it's a response from Architect, forward to Gateway
-        if msg.type == "RESPONSE":
-             await ctx.send(gateway.address, msg)
-             await pipeline_manager.remove_pipeline(msg.request_id)
-             return
-
-        # Identify the step that completed
-        step_id = msg.metadata.get("step_id")
-        if step_id:
-            pipeline = await pipeline_manager.get_pipeline(msg.request_id)
-            if pipeline:
-                pipeline.mark_step_complete(step_id, msg.content)
-                
-                # Special handling for RETRIEVE -> Gateway memory (legacy requirement?)
-                # If we want to keep the "remember query" logic, we can do it here if needed.
-                # But the new pipeline flow handles data passing via step results.
-                
-                await self.process_pipeline_step(ctx, msg.request_id)
-        else:
-            ctx.logger.warning(f"Received message without step_id from {sender_type}")
-
-    async def process_pipeline_step(self, ctx: Context, request_id: str):
-        pipeline = await pipeline_manager.get_pipeline(request_id)
-        if not pipeline:
+        if msg.type == ThoughtType.FAILED:
+            await self._handle_failed_thought(ctx, msg)
             return
 
-        executable_steps = pipeline.get_executable_steps()
-        for step in executable_steps:
-            agent_addr = agent_registry.lease_agent(step.agent_type)
-            if agent_addr:
-                # Resolve content if needed
-                content = step.content
-                if step.agent_type == AGENT_TYPE_FILTER:
-                    # Filter expects content from the previous step (Retrieve)
-                    if step.dependencies:
-                        dep_id = step.dependencies[0]
-                        content = pipeline.results.get(dep_id, "")
-                
-                # Prepare metadata
-                metadata = step.metadata.copy()
-                metadata["step_id"] = step.id
-                
-                # Determine message type
-                msg_type = to_msg_type(step.agent_type)
-                
-                pipeline.mark_step_running(step.id)
-                
-                await ctx.send(
-                    agent_addr,
-                    Thought(
-                        request_id=pipeline.request_id,
-                        type=msg_type,
-                        content=content,
-                        metadata=metadata
-                    )
-                )
-            else:
-                ctx.logger.warning(f"No agents available for type {step.agent_type}")
+        if msg.metadata.get("goal_type") == str(AgentGoalType.PLAN):
+            await orchestrator.start_new_graph(ctx, msg.request_id, msg.content)
+        else:
+            node_id = msg.metadata.get("node_id")
+            await orchestrator.handle_step_completion(ctx, msg.request_id, node_id, msg.impressions)
+
+    async def handle_replan_request(self, ctx: Context, sender: str, msg: ReplanRequest):
+        """Handles a request from the orchestrator to create a new plan."""
+        ctx.logger.warning(f"Received replan request for {msg.request_id} due to: {msg.reason}")
+        # The orchestrator handles cleanup, so we just need to trigger a new plan.
+        await self._request_new_plan(ctx, msg.request_id)
+
+    async def _request_new_plan(self, ctx: Context, request_id: str):
+        """Sends a request to the Planner agent to generate a new graph."""
+        original_query = shared_memory.get(f"{request_id}:query")
+        if not original_query:
+            ctx.logger.error(f"Cannot re-plan for request {request_id}: Original query not found.")
+            return
+
+        planner_address = agent_registry.get_agent(AGENT_TYPE_PLANNER)
+        if not planner_address:
+            ctx.logger.error("Planner agent not found in registry.")
+            return
+
+        ctx.logger.info(f"Requesting new plan for request: {request_id}")
+        await ctx.send(planner_address, AgentGoal(
+            request_id=request_id,
+            type=AgentGoalType.PLAN,
+            content=original_query
+        ))
+
+    async def _handle_failed_thought(self, ctx: Context, msg: Thought):
+        """Handles any failed thought by notifying the orchestrator."""
+        ctx.logger.error(f"Goal failed for request {msg.request_id}. Content: {msg.content}")
+        orchestrator.handle_failure(msg.request_id)

@@ -10,7 +10,7 @@ class AgentConfig:
         self.prompts = prompts
         self.schemas = schemas
 
-    def get_prompt(self, name):
+    def get_prompt(self, name="default"):
         return self.prompts.get(name)
 
     def get_schema(self, name):

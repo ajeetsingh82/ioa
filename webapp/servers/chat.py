@@ -28,6 +28,7 @@ class QueryRequest(BaseModel):
 class ResultRequest(BaseModel):
     text: str
     request_id: str
+    type: int # -1: complete, 0: heartbeat, >0: more to follow
 
 class RequestStatus(BaseModel):
     status: str
@@ -100,7 +101,7 @@ async def submit_query(query: QueryRequest):
         pending_requests[request_id] = {
             "text": query.text,
             "status": "pending",
-            "result": None,
+            "result": "", # Initialize with empty string for streaming
             "submitted_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -138,16 +139,41 @@ async def get_status(request_id: str):
 @app.get("/api/stream_result/{request_id}")
 async def stream_result(request_id: str):
     async def event_generator():
+        last_pos = 0
         while True:
             async with state_lock:
                 req = pending_requests.get(request_id)
                 if not req:
                     yield f"data: {{'status':'failed','text':None,'error':'Unknown request_id'}}\n\n"
                     return
-                text = req["result"] or ""
+                
+                full_text = req["result"] or ""
                 status = req["status"]
-
-            yield f"data: {text}\n\n"
+                
+                # Send only new content if any
+                if len(full_text) > last_pos:
+                    new_content = full_text[last_pos:]
+                    # Escape newlines for SSE data field if needed, but usually client handles it.
+                    # For simplicity, we send the whole text or diff. 
+                    # Let's send the diff.
+                    # Note: SSE format is "data: <payload>\n\n"
+                    # If payload has newlines, we need to handle it.
+                    # Simple approach: send JSON
+                    import json
+                    payload = json.dumps({"text": new_content, "status": status})
+                    yield f"data: {payload}\n\n"
+                    last_pos = len(full_text)
+                elif status == "done":
+                     # Send final done signal
+                     import json
+                     payload = json.dumps({"text": "", "status": "done"})
+                     yield f"data: {payload}\n\n"
+                     return
+                elif status == "failed":
+                     import json
+                     payload = json.dumps({"text": "", "status": "failed"})
+                     yield f"data: {payload}\n\n"
+                     return
 
             if status == "done" or status == "failed":
                 return
@@ -166,10 +192,22 @@ async def handle_result(result: ResultRequest):
         if not req:
             logger.warning(f"Received result for unknown request_id {result.request_id}")
             return {"status": "unknown_request"}
+        
         # Preserve Markdown formatting
         text = result.text.replace("\r\n", "\n")
-        req.update({"status": "done", "result": text})
-    logger.info(f"Result stored for request_id {result.request_id}")
+        
+        # Append text
+        if req["result"] is None:
+            req["result"] = ""
+        req["result"] += text
+        
+        # Update status based on type
+        if result.type == -1:
+            req["status"] = "done"
+        elif result.type >= 0:
+            req["status"] = "pending" # Still pending/streaming
+            
+    logger.info(f"Result update for request_id {result.request_id}. Type: {result.type}")
     return {"status": "delivered", "text": text}
 
 # -------------------------------

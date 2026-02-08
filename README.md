@@ -265,3 +265,15 @@ docker ps -a
    - ```docker compose up --build -d```
 2. Start Bureau Locally: In a separate terminal, set up your local Python 3.12 environment and run python app.py.
 3. Access UI: Open your browser to http://localhost:8080.
+
+--------------------------------------------------------
+
+```
+curl -X POST http://localhost:8080/api/result \
+-H "Content-Type: application/json" \
+-d '{
+"text": "This is a test response.",
+"request_id": "some-valid-request-id-from-your-app",
+"type": -1
+}'
+```

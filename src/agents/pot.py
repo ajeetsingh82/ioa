@@ -3,13 +3,13 @@ import tempfile
 import os
 from uagents import Context
 from .base import BaseAgent
-from ..model.models import Thought
+from ..model.models import Thought, AgentGoal, AgentGoalType, ThoughtType
 from ..config.store import agent_config_store
 
 AGENT_TYPE_COMPUTE = "compute"
 
 class ProgramOfThoughtAgent(BaseAgent):
-    def __init__(self, name: str, seed: str, conductor_address: str):
+    def __init__(self, name: str, seed: str, conductor_address: str = None):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
         self.type = AGENT_TYPE_COMPUTE
         
@@ -21,31 +21,32 @@ class ProgramOfThoughtAgent(BaseAgent):
         if not self.prompt:
             raise ValueError(f"Prompt 'default' not found for agent type '{self.type}'.")
             
-        self.on_message(model=Thought)(self.execute_code)
+        # Register the handler using the queued_handler wrapper
+        self.on_message(model=AgentGoal)(self.queued_handler(self.process_code_execution))
 
-    async def execute_code(self, ctx: Context, sender: str, msg: Thought):
+    async def process_code_execution(self, ctx: Context, sender: str, msg: AgentGoal):
         """
-        Executes the provided Python code in a subprocess and returns the output.
+        Executes the provided Python code and returns the output as a Thought.
         """
-        if msg.type != "CODE_EXEC":
+        if msg.type != AgentGoalType.TASK:
             ctx.logger.warning(f"ProgramOfThought received unknown message type: {msg.type}")
             return
 
-        ctx.logger.info(f"Received code execution request {msg.request_id}")
+        ctx.logger.info(f"Processing code execution request {msg.request_id}")
         
-        # NOTE: The prompt is loaded but not yet used to generate code.
-        # This is a wiring step for a future iteration.
         code = msg.content
         timeout = int(msg.metadata.get("timeout", "5"))
         metadata = msg.metadata.copy()
+        metadata["goal_type"] = str(msg.type)
 
-        # Create a temporary file for the code
+        response_type = ThoughtType.FAILED
+        response_content = ""
+
         try:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
                 f.write(code)
                 temp_file_path = f.name
 
-            # Execute the code
             try:
                 result = subprocess.run(
                     ["python3", temp_file_path],
@@ -54,57 +55,35 @@ class ProgramOfThoughtAgent(BaseAgent):
                     timeout=timeout
                 )
                 
-                status = "success" if result.returncode == 0 else "error"
-                
-                metadata["stderr"] = result.stderr
-                metadata["exit_code"] = str(result.returncode)
-                metadata["status"] = status
+                if result.returncode == 0:
+                    response_type = ThoughtType.RESOLVED
+                    response_content = result.stdout
+                else:
+                    response_content = result.stderr
 
-                response = Thought(
-                    request_id=msg.request_id,
-                    type="CODE_RESULT",
-                    content=result.stdout,
-                    metadata=metadata
-                )
+                metadata["exit_code"] = str(result.returncode)
                 
             except subprocess.TimeoutExpired:
                 ctx.logger.warning(f"Code execution timed out for request {msg.request_id}")
-                metadata["stderr"] = "Execution timed out."
+                response_content = "Execution timed out."
                 metadata["exit_code"] = "-1"
-                metadata["status"] = "timeout"
-                response = Thought(
-                    request_id=msg.request_id,
-                    type="CODE_RESULT",
-                    content="",
-                    metadata=metadata
-                )
             except Exception as e:
                 ctx.logger.error(f"Error executing code for request {msg.request_id}: {e}")
-                metadata["stderr"] = str(e)
+                response_content = str(e)
                 metadata["exit_code"] = "-1"
-                metadata["status"] = "error"
-                response = Thought(
-                    request_id=msg.request_id,
-                    type="CODE_RESULT",
-                    content="",
-                    metadata=metadata
-                )
             finally:
-                # Clean up the temporary file
                 if os.path.exists(temp_file_path):
                     os.remove(temp_file_path)
 
         except Exception as e:
              ctx.logger.error(f"Failed to create temporary file for request {msg.request_id}: {e}")
-             metadata["stderr"] = f"System error: {str(e)}"
+             response_content = f"System error: {str(e)}"
              metadata["exit_code"] = "-1"
-             metadata["status"] = "error"
-             response = Thought(
-                request_id=msg.request_id,
-                type="CODE_RESULT",
-                content="",
-                metadata=metadata
-            )
 
-        await ctx.send(sender, response)
-        ctx.logger.info(f"Sent execution result for request {msg.request_id}. Status: {response.metadata.get('status')}")
+        await ctx.send(sender, Thought(
+            request_id=msg.request_id,
+            type=response_type,
+            content=response_content,
+            metadata=metadata
+        ))
+        ctx.logger.info(f"Sent execution result for request {msg.request_id}. Status: {response_type}")

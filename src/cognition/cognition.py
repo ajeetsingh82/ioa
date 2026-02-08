@@ -19,9 +19,22 @@ class SharedMemory:
         if key in self._memory:
             del self._memory[key]
 
-    def clear_session(self, request_id: str):
-        """Clears all entries related to a specific request_id."""
-        keys_to_delete = [key for key in self._memory if key.startswith(request_id)]
+    def clear_session(self, request_id: str, preserve_query: bool = False):
+        """
+        Clears all entries related to a specific request_id.
+        
+        Args:
+            request_id: The ID of the session to clear.
+            preserve_query: If True, the original query for the session will not be deleted.
+        """
+        query_key = f"{request_id}:query"
+        keys_to_delete = []
+        for key in self._memory:
+            if key.startswith(request_id):
+                if preserve_query and key == query_key:
+                    continue
+                keys_to_delete.append(key)
+
         for key in keys_to_delete:
             del self._memory[key]
 

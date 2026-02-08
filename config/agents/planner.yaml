@@ -1,6 +1,6 @@
-agent_type: strategist
+agent_type: planner
 prompts:
-  - name: planner
+  - name: default
     text: |
       You are a planning engine.
       Your task is to convert a user goal into a directed acyclic execution graph.
@@ -39,36 +39,6 @@ prompts:
       - validate: evaluate answer quality and alignment
 
       Generate execution plan.
-  - name: legacy
-    text: |
-      You are the Strategist agent.
-
-      Your task is to decompose the user query into a list of tasks.
-
-      User query:{query}
-
-      OUTPUT RULES (MANDATORY):
-
-      - Output MUST be a single JSON object
-      - The object MUST contain exactly one key: "answer"
-      - "answer" MUST be a JSON array
-      - Each array element MUST be an object with:
-          - "label": string
-          - "sub_query": string
-      - Output MUST start with '{{' and end with '}}'
-      - Do NOT output a JSON schema
-      - Do NOT use Markdown
-      - Do NOT use code fences
-      - Do NOT add explanations or extra keys
-
-      Correct format example:
-
-      {{
-        "answer": [
-          {{ "label": "history", "sub_query": "history of AI" }},
-          {{ "label": "trends", "sub_query": "current AI trends" }}
-        ]
-      }}
 
 schemas:
   - name: plan_json
@@ -79,11 +49,29 @@ schemas:
           - id: "string"
             type: "string, one of [retrieve, semantics, compute, reason, synthesize, validate]"
             description: "string"
-            inputs_expected: ["string"]
-            outputs_produced: ["string"]
-            success_condition: "string"
         edges:
           - from: "node_id"
             to: "node_id"
         entry_nodes: ["node_id"]
         terminal_node: "node_id"
+  - name: fixed_plan_json
+    definition:
+      goal: "fixed plan for execution"
+      graph:
+        nodes:
+          - id: "0"
+            type: "retrieve"
+            description: "retrieve data from web interface against user query"
+          - id: "1"
+            type: "filter"
+            description: "filter set of retrieved data against user query"
+          - id: "2"
+            type: "synthesize"
+            description: "thinks with the help of LLM to answer user query based on filtered data chunks"
+        edges:
+          - from: "0"
+            to: "1"
+          - from: "1"
+            to: "2"
+        entry_nodes: [ "0" ]
+        terminal_node: "2"
