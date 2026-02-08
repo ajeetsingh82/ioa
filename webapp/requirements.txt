@@ -1,0 +1,7 @@
+uagents
+fastapi[all]
+uvicorn[standard]
+requests
+ddgs
+protobuf==4.23.4
+httpx

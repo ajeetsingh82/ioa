@@ -76,15 +76,18 @@ app.add_middleware(
 # -------------------------------
 @app.get("/", response_class=FileResponse)
 async def get_chat_ui():
-    """Serve ui.html from resources folder."""
-    # Robust path resolution:
-    # This file is at src/servers/chat.py. We want resources/ui.html at the project root.
+    """Serve ui.html from the local resources folder."""
+    # This file is at webapp/servers/chat.py. We want webapp/resources/ui.html.
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(os.path.dirname(current_dir))
-    file_path = os.path.join(project_root, "resources", "ui.html")
+    # Go up one level from 'servers' to 'webapp', then into 'resources'
+    file_path = os.path.join(os.path.dirname(current_dir), "resources", "ui.html")
     
     if not os.path.exists(file_path):
-        raise HTTPException(404, "UI file not found")
+        # Fallback for running from root if needed, but the primary path should be correct
+        file_path = os.path.join("webapp", "resources", "ui.html")
+        if not os.path.exists(file_path):
+            raise HTTPException(404, "UI file not found")
+            
     return FileResponse(file_path, media_type="text/html")
 
 # -------------------------------
@@ -105,6 +108,7 @@ async def submit_query(query: QueryRequest):
     return {"request_id": request_id, "status": "pending"}
 
 async def forward_to_bureau(request_id: str, text: str):
+    # In Docker, this will be http://bureau:9000/submit
     bureau_url = os.getenv("GATEWAY_ADDRESS", "http://127.0.0.1:9000/submit")
     try:
         response = await http_client.post(bureau_url, json={"text": text, "request_id": request_id})

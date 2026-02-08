@@ -251,3 +251,13 @@ If something breaks:
 
 Version: Pipeline Stabilized\
 Next Milestone: Graph-Based Strategic Planner
+
+------------------------------------------------------------------------
+```
+docker stop ollama-llm
+docker rm ollama-llm
+docker compose down
+```
+1. Start Docker Services: In your project root, run ```docker compose up --build```. This will start the ollama and webapp containers.
+2. Start Bureau Locally: In a separate terminal, set up your local Python 3.12 environment and run python app.py.
+3. Access UI: Open your browser to http://localhost:8080.

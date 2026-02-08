@@ -1,0 +1,29 @@
+services:
+  # The Ollama LLM Service
+  ollama:
+    build:
+      context: ./llm
+      dockerfile: Dockerfile
+    container_name: ollama-llm
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+
+  # The Web Application (UI) Service
+  webapp:
+    build:
+      context: ./webapp
+      dockerfile: Dockerfile
+    container_name: webapp-ui
+    ports:
+      - "8080:8080"
+    # This allows the webapp container to connect to services running on the host machine.
+    # We use host.docker.internal to point to the bureau's gateway on localhost:9000.
+    environment:
+      - GATEWAY_ADDRESS=http://host.docker.internal:9000/submit
+    restart: unless-stopped
+
+volumes:
+  ollama-data:
