@@ -46,11 +46,9 @@ class BaseAgent(Agent):
 
     async def register_on_startup(self, ctx: Context):
         """Registers the agent directly with the central registry."""
-        # Direct registration (preferred for single-process/bureau setup)
         agent_registry.register(self.type, self.address)
         self._logger.info(f"Registered {self.type} agent '{self.name}' with Registry.")
 
-        # Legacy/Distributed registration via message
         if self._conductor_address:
             self._logger.info(f"Sending registration message to Conductor at {self._conductor_address}")
             await ctx.send(self._conductor_address, AgentRegistration(agent_type=self.type))
@@ -58,10 +56,8 @@ class BaseAgent(Agent):
     async def process_request_queue(self, ctx: Context):
         """Drains the request queue and executes tasks."""
         while not self.request_queue.empty():
-            # Retrieve the task
             original_ctx, sender, msg, func = await self.request_queue.get()
             try:
-                # Execute the task using the original context
                 await func(original_ctx, sender, msg)
             except Exception as e:
                 ctx.logger.error(f"Error processing request in queue: {e}")
@@ -74,10 +70,7 @@ class BaseAgent(Agent):
         ctx.logger.debug(f"Enqueued request from {sender}. Queue size: {self.request_queue.qsize()}")
 
     def queued_handler(self, func: Callable):
-        """
-        Returns an async handler that enqueues the request instead of processing it immediately.
-        Use this to wrap your processing logic when registering handlers.
-        """
+        """Returns an async handler that enqueues the request."""
         async def wrapper(ctx: Context, sender: str, msg: Any):
             await self.enqueue_request(ctx, sender, msg, func)
         return wrapper
@@ -89,13 +82,13 @@ class BaseAgent(Agent):
             self._logger.error("HTTP client not initialized.")
             return "Error: HTTP client not available."
         try:
-            self._logger.info(f"Agent {self.name} is thinking...")
+            self._logger.debug(f"Agent {self.name} is thinking...")
             response = await self._http_client.post(
                 LLM_URL,
                 json={"model": LLM_MODEL, "prompt": prompt, "stream": False}
             )
             response.raise_for_status()
-            self._logger.info(f"Agent {self.name} finished thinking.")
+            self._logger.debug(f"Agent {self.name} finished thinking.")
             return response.json().get('response', "").strip()
         except httpx.HTTPStatusError as e:
             self._logger.error(f"LLM request for agent {self.name} failed with status {e.response.status_code}: {e.response.text}")
