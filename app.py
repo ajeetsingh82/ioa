@@ -52,17 +52,12 @@ if __name__ == "__main__":
     os.environ["CHAT_SERVER_URL"] = "http://localhost:8080/api/result"
 
     # Initialize agents
-    conductor, strategist, scout, filter_agent, architect, program_of_thought = init_agents()
+    agents = init_agents()
 
-    # Create Bureau
+    # Create Bureau and add all agents in a loop
     bureau = Bureau(port=8000)
-    bureau.add(conductor)
-    bureau.add(gateway)
-    bureau.add(strategist)
-    bureau.add(architect)
-    bureau.add(program_of_thought)
-    bureau.add(scout)
-    bureau.add(filter_agent)
+    for agent in agents:
+        bureau.add(agent)
 
     # Start HTTP server in background thread
     http_thread = threading.Thread(target=run_gateway_http, daemon=True)

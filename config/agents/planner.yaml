@@ -60,16 +60,11 @@ schemas:
         nodes:
           - id: "0"
             type: "scout"
-            description: "retrieve data from web interface against user query"
+            description: "retrieve data from web interface against user query and filter the results"
           - id: "1"
-            type: "filter"
-            description: "filter set of retrieved data against user query"
-          - id: "2"
             type: "synthesize"
             description: "thinks with the help of LLM to answer user query based on filtered data chunks"
         edges:
           - from: "0"
             to: "1"
-          - from: "1"
-            to: "2"
-        terminal_node: "2"
+        terminal_node: "1"

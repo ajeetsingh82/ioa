@@ -1,8 +1,7 @@
 from enum import Enum
 from typing import Type, TypeVar, Optional
 
-from ..agents.scout import AGENT_TYPE_RETRIEVE
-from ..agents.filter import AGENT_TYPE_FILTER
+from ..agents.scout import AGENT_TYPE_SCOUT
 from ..agents.architect import AGENT_TYPE_SYNTHESIZE
 from ..agents.pot import AGENT_TYPE_COMPUTE
 from ..model.models import AgentGoalType
@@ -45,13 +44,11 @@ def get_goal_type(agent_type: str) -> AgentGoalType:
     """
     Maps an agent's type string to the corresponding AgentGoalType enum member.
     """
-    if agent_type == AGENT_TYPE_RETRIEVE:
-        return AgentGoalType.SEARCH
-    elif agent_type == AGENT_TYPE_FILTER:
-        return AgentGoalType.FILTER
+    if agent_type == AGENT_TYPE_SCOUT:
+        return AgentGoalType.TASK
     elif agent_type == AGENT_TYPE_SYNTHESIZE:
-        return AgentGoalType.SYNTHESIZE
+        return AgentGoalType.SYNTHESYS
     elif agent_type == AGENT_TYPE_COMPUTE:
-        return AgentGoalType.CODE_EXEC
+        return AgentGoalType.TASK
     else:
         raise ValueError(f"No AgentGoalType defined for agent type '{agent_type}'")

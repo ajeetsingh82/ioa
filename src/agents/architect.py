@@ -1,5 +1,5 @@
-# The Architect Agent: The "Synthesis" or "Reduce" phase.
 import ast
+import json
 from uagents import Context
 from .base import BaseAgent
 from ..model.models import Thought, AgentGoal, AgentGoalType, ThoughtType
@@ -7,9 +7,7 @@ from ..cognition.cognition import shared_memory
 from ..utils.json_parser import SafeJSONParser
 from ..config.store import agent_config_store
 
-# Instantiate the parser
 json_parser = SafeJSONParser()
-
 AGENT_TYPE_SYNTHESIZE = "synthesize"
 
 class ArchitectAgent(BaseAgent):
@@ -28,18 +26,25 @@ class ArchitectAgent(BaseAgent):
 
     async def process_synthesis(self, ctx: Context, sender: str, msg: AgentGoal):
         """
-        Synthesizes an answer and stores it in shared memory using a descriptive, self-generated key.
+        Assembles a list of filtered data chunks from shared memory and synthesizes them into a final answer.
         """
         if msg.type != AgentGoalType.TASK:
             ctx.logger.warning(f"Architect received unknown message type: {msg.type}")
             return
 
-        ctx.logger.debug(f"Architect processing synthesis for request: {msg.request_id}")
+        ctx.logger.info(f"Architect processing synthesis for request: {msg.request_id}")
 
         try:
             input_keys = ast.literal_eval(msg.content)
-            filtered_data_key = input_keys[0]
-            context = shared_memory.get(filtered_data_key)
+            if not input_keys:
+                raise ValueError("Architect received no input keys.")
+
+            # 1. Get the list of filtered chunks from shared memory
+            filtered_chunks_json = shared_memory.get(input_keys[0])
+            filtered_chunks = json.loads(filtered_chunks_json)
+            
+            # 2. Combine the chunks into a single context string
+            context = "\n\n---\n\n".join(filtered_chunks)
             
             original_query = shared_memory.get(f"{msg.request_id}:query")
             if not original_query:
@@ -55,16 +60,16 @@ class ArchitectAgent(BaseAgent):
                 if "answer" in response_json:
                     synthesized_data = response_json["answer"]
                 else:
-                    ctx.logger.error(f"Architect parser fallback. Using raw response.")
+                    ctx.logger.error(f"Architect parser fallback was triggered. Using raw response.")
                     synthesized_data = llm_response
-
-            # Agent chooses a descriptive impression and generates the final answer key.
+            
+            # 3. Store the final answer
             step_id = msg.metadata.get("step_id")
             impression = "final_answer"
             output_key = f"{msg.request_id}:{step_id}:{impression}"
             shared_memory.set(output_key, synthesized_data)
 
-            # Report the final answer key back to the conductor.
+            # 4. Report completion
             response_metadata = msg.metadata.copy()
             response_metadata["goal_type"] = str(msg.type)
             await ctx.send(sender, Thought(
@@ -75,7 +80,7 @@ class ArchitectAgent(BaseAgent):
                 metadata=response_metadata
             ))
         except Exception as e:
-            ctx.logger.error(f"Architect failed during synthesis: {e}")
+            ctx.logger.error(f"Architect failed during synthesis: {e}", exc_info=True)
             await ctx.send(sender, Thought(
                 request_id=msg.request_id,
                 type=ThoughtType.FAILED,

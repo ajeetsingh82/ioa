@@ -4,7 +4,6 @@ from .ioa import ConductorAgent
 from .agents.gateway import gateway
 from .agents.planner import PlannerAgent
 from .agents.scout import ScoutAgent
-from .agents.filter import FilterAgent
 from .agents.architect import ArchitectAgent
 from .agents.pot import ProgramOfThoughtAgent
 
@@ -12,10 +11,10 @@ from .agents.pot import ProgramOfThoughtAgent
 # Agent Initialization
 # ============================================================
 
-def init_agents():
+def init_agents() -> list[Agent]:
     """
-    Initializes all agents in the system and configures their relationships.
-    Returns a tuple of (conductor, planner, scout, filter_agent, architect, program_of_thought).
+    Initializes all agents in the system.
+    Returns a list containing all initialized agents.
     """
     conductor = ConductorAgent(name="conductor", seed="conductor_seed")
 
@@ -29,11 +28,6 @@ def init_agents():
         seed="scout_seed",
     )
 
-    filter_agent = FilterAgent(
-        name="filter",
-        seed="filter_seed",
-    )
-
     architect = ArchitectAgent(
         name="architect",
         seed="architect_seed",
@@ -44,6 +38,5 @@ def init_agents():
         seed="program_of_thought_seed",
     )
 
-    # Gateway is self-configuring via the registry and global import
-
-    return conductor, planner, scout, filter_agent, architect, program_of_thought
+    # The gateway is also included for completeness, though it's a global instance.
+    return [conductor, gateway, planner, scout, architect, program_of_thought]
