@@ -76,6 +76,17 @@ ollama pull llama3.2:1b
 ollama pull llama3.2:3b
 ```
 
+```
+docker compose -f llm/docker-compose.yml up -d
+```
+
+```
+curl http://localhost:11434/api/generate -d '{
+"model": "llama3.2:1b",
+"prompt": "Explain quicksort in one sentence.",
+"stream": false
+}'
+```
 ------------------------------------------------------------------------
 
 # Setup Python Environment
