@@ -1,4 +1,4 @@
-agent_type: COMPUTE
+agent_type: compute
 prompts:
   - name: default
     text: |

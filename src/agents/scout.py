@@ -6,7 +6,7 @@ from ..model.models import AgentRegistration, Thought
 from ..data.fetcher import search_web
 from ..config.store import agent_config_store
 
-AGENT_TYPE_RETRIEVE = "RETRIEVE"
+AGENT_TYPE_RETRIEVE = "retrieve"
 
 class ScoutAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):

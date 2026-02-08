@@ -6,7 +6,7 @@ from .base import BaseAgent
 from ..model.models import Thought, UserQuery
 from ..config.store import agent_config_store
 
-AGENT_TYPE_USER = "SPEAKER"
+AGENT_TYPE_USER = "speaker"
 
 class GatewayAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str = None):

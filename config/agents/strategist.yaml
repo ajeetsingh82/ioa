@@ -1,4 +1,4 @@
-agent_type: STRATEGIST
+agent_type: strategist
 prompts:
   - name: planner
     text: |

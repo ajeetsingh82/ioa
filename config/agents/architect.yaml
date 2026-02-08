@@ -1,4 +1,4 @@
-agent_type: SYNTHESIZE
+agent_type: synthesize
 prompts:
   - name: default
     text: |

@@ -12,7 +12,7 @@ from ..config.store import agent_config_store
 # Instantiate the parser
 json_parser = SafeJSONParser()
 
-AGENT_TYPE_STRATEGIST = "STRATEGIST"
+AGENT_TYPE_STRATEGIST = "strategist"
 
 class StrategistAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):

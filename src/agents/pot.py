@@ -6,7 +6,7 @@ from .base import BaseAgent
 from ..model.models import Thought
 from ..config.store import agent_config_store
 
-AGENT_TYPE_COMPUTE = "COMPUTE"
+AGENT_TYPE_COMPUTE = "compute"
 
 class ProgramOfThoughtAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):

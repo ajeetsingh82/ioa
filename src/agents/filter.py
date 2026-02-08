@@ -9,7 +9,7 @@ from ..config.store import agent_config_store
 # Instantiate the parser
 json_parser = SafeJSONParser()
 
-AGENT_TYPE_FILTER = "FILTER"
+AGENT_TYPE_FILTER = "filter"
 
 class FilterAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):

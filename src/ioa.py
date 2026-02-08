@@ -5,9 +5,6 @@ from .model.models import (
     AgentRegistration, NewPipeline, Thought
 )
 from .agents.gateway import gateway
-from .agents.scout import AGENT_TYPE_RETRIEVE
-from .agents.filter import AGENT_TYPE_FILTER
-from .agents.architect import AGENT_TYPE_SYNTHESIZE
 from .utils.utils import to_msg_type
 
 class ConductorAgent(Agent):

@@ -1,4 +1,4 @@
-agent_type: FILTER
+agent_type: filter
 prompts:
   - name: specialized
     text: |

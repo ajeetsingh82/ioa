@@ -1,4 +1,4 @@
-agent_type: SPEAKER
+agent_type: speaker
 prompts:
   - name: speaker
     text: |

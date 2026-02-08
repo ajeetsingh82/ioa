@@ -1,4 +1,4 @@
-agent_type: RETRIEVE
+agent_type: retrieve
 prompts:
   - name: default
     text: |
