@@ -4,6 +4,7 @@ from uagents import Context
 from .base import BaseAgent
 from ..model.models import AgentRegistration, Thought
 from ..data.fetcher import search_web
+from ..config.store import agent_config_store
 
 AGENT_TYPE_RETRIEVE = "RETRIEVE"
 
@@ -11,6 +12,15 @@ class ScoutAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
         self.type = AGENT_TYPE_RETRIEVE
+        
+        # Load configuration from the central store
+        config = agent_config_store.get_config(self.type)
+        if not config:
+            raise ValueError(f"Configuration for agent type '{self.type}' not found.")
+        self.prompt = config.get_prompt('default')
+        if not self.prompt:
+            raise ValueError(f"Prompt 'default' not found for agent type '{self.type}'.")
+            
         self.on_message(model=Thought)(self.search)
 
     async def search(self, ctx: Context, sender: str, msg: Thought):
@@ -28,7 +38,7 @@ class ScoutAgent(BaseAgent):
             ctx.logger.warning("Scout received empty search query.")
             await ctx.send(sender, Thought(
                 request_id=msg.request_id,
-                type="RETRIEVE",
+                type=self.type,
                 content="No search performed: Query was empty.",
                 metadata=metadata
             ))
@@ -36,12 +46,15 @@ class ScoutAgent(BaseAgent):
 
         ctx.logger.debug(f"Scout received request: '{query}'")
         
+        # NOTE: The prompt is loaded but not used yet. This is a wiring step.
+        # In the future, the prompt could be used to format the query or process results.
+        
         # Run the synchronous search_web function in a separate thread to avoid blocking
         content = await asyncio.to_thread(search_web, query)
         
         await ctx.send(sender, Thought(
             request_id=msg.request_id,
-            type="RETRIEVE",
+            type=self.type,
             content=content,
             metadata=metadata
         ))

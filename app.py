@@ -2,8 +2,13 @@ import os
 import threading
 import uvicorn
 import logging
-
 from uagents import Bureau
+from pathlib import Path
+
+# --- BASE DIRECTORY ---
+# Define the root of the project.
+BASE_DIR = Path(__file__).resolve().parent
+os.environ['IOA_BASE_DIR'] = str(BASE_DIR)
 
 # --- Imports ---
 from src.init_agents import init_agents

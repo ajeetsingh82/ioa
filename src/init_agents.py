@@ -6,7 +6,7 @@ from .agents.strategist import StrategistAgent
 from .agents.scout import ScoutAgent
 from .agents.filter import FilterAgent
 from .agents.architect import ArchitectAgent
-from .agents.program_of_thought import ProgramOfThoughtAgent
+from .agents.pot import ProgramOfThoughtAgent
 
 # ============================================================
 # Agent Initialization

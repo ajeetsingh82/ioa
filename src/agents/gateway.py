@@ -4,8 +4,9 @@ from queue import Queue
 from uagents import Context
 from .base import BaseAgent
 from ..model.models import Thought, UserQuery
+from ..config.store import agent_config_store
 
-AGENT_TYPE_USER = "USER"
+AGENT_TYPE_USER = "SPEAKER"
 
 class GatewayAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str = None):
@@ -16,6 +17,15 @@ class GatewayAgent(BaseAgent):
         self.strategist_address = None
         self._queries = {} # Store original queries by request_id
         
+        # Load configuration from the central store for the 'speaker' role
+        speaker_config = agent_config_store.get_config(self.type)
+        if not speaker_config:
+            raise ValueError("Configuration for agent type 'SPEAKER' not found.")
+        self.speaker_prompt = speaker_config.get_prompt('speaker')
+        self.failure_prompt = speaker_config.get_prompt('failure')
+        if not self.speaker_prompt or not self.failure_prompt:
+            raise ValueError("Required prompts ('default', 'failure') not found for agent type 'speaker'.")
+
         # Register handlers
         self.on_interval(period=0.5)(self.process_queue)
         self.on_interval(period=0.5)(self.process_cognition_stack)
@@ -69,12 +79,10 @@ class GatewayAgent(BaseAgent):
         job = self.cognition_stack.pop(0) # FIFO processing
         ctx.logger.info(f"Processing job from cognition stack for request {job['request_id']}")
 
-        from ..prompt.prompt import SPEAKER_PROMPT, FAILURE_PROMPT
-
         if job["status"] == "success":
-            prompt = SPEAKER_PROMPT.format(query=job["original_query"], data=job["synthesized_data"])
+            prompt = self.speaker_prompt.format(query=job["original_query"], data=job["synthesized_data"])
         else:
-            prompt = FAILURE_PROMPT.format(query=job["original_query"])
+            prompt = self.failure_prompt.format(query=job["original_query"])
             
         final_text = await self.think(context="", goal=prompt)
         

@@ -1,7 +1,7 @@
 from ..agents.scout import AGENT_TYPE_RETRIEVE
 from ..agents.filter import AGENT_TYPE_FILTER
 from ..agents.architect import AGENT_TYPE_SYNTHESIZE
-from ..agents.program_of_thought import AGENT_TYPE_COMPUTE
+from ..agents.pot import AGENT_TYPE_COMPUTE
 
 def to_msg_type(agent_type: str) -> str:
     """

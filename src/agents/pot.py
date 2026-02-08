@@ -4,6 +4,7 @@ import os
 from uagents import Context
 from .base import BaseAgent
 from ..model.models import Thought
+from ..config.store import agent_config_store
 
 AGENT_TYPE_COMPUTE = "COMPUTE"
 
@@ -11,6 +12,15 @@ class ProgramOfThoughtAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
         self.type = AGENT_TYPE_COMPUTE
+        
+        # Load configuration from the central store
+        config = agent_config_store.get_config(self.type)
+        if not config:
+            raise ValueError(f"Configuration for agent type '{self.type}' not found.")
+        self.prompt = config.get_prompt('default')
+        if not self.prompt:
+            raise ValueError(f"Prompt 'default' not found for agent type '{self.type}'.")
+            
         self.on_message(model=Thought)(self.execute_code)
 
     async def execute_code(self, ctx: Context, sender: str, msg: Thought):
@@ -23,6 +33,8 @@ class ProgramOfThoughtAgent(BaseAgent):
 
         ctx.logger.info(f"Received code execution request {msg.request_id}")
         
+        # NOTE: The prompt is loaded but not yet used to generate code.
+        # This is a wiring step for a future iteration.
         code = msg.content
         timeout = int(msg.metadata.get("timeout", "5"))
         metadata = msg.metadata.copy()

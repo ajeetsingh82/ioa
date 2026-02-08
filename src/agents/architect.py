@@ -3,8 +3,8 @@ from uagents import Context
 from .base import BaseAgent
 from ..model.models import Thought
 from ..cognition.cognition import shared_memory
-from ..prompt.prompt import ARCHITECT_PROMPT
 from ..utils.json_parser import SafeJSONParser
+from ..config.store import agent_config_store
 
 # Instantiate the parser
 json_parser = SafeJSONParser()
@@ -15,6 +15,15 @@ class ArchitectAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
         self.type = AGENT_TYPE_SYNTHESIZE
+        
+        # Load configuration from the central store using the agent's type
+        config = agent_config_store.get_config(self.type)
+        if not config:
+            raise ValueError(f"Configuration for agent type '{self.type}' not found.")
+        self.prompt = config.get_prompt('default')
+        if not self.prompt:
+            raise ValueError(f"Prompt 'default' not found for agent type '{self.type}'.")
+
         self.on_message(model=Thought)(self.synthesize_answer)
 
     async def synthesize_answer(self, ctx: Context, sender: str, msg: Thought):
@@ -42,7 +51,7 @@ class ArchitectAgent(BaseAgent):
         synthesized_data = "Insufficient information gathered to form an answer."
 
         if context:
-            prompt = ARCHITECT_PROMPT.format(query=original_query, context=context)
+            prompt = self.prompt.format(query=original_query, context=context)
             
             llm_response = await self.think(context="", goal=prompt)
             response_json = json_parser.parse(llm_response)
