@@ -52,7 +52,6 @@ schemas:
         edges:
           - from: "node_id"
             to: "node_id"
-        entry_nodes: ["node_id"]
         terminal_node: "node_id"
   - name: fixed_plan_json
     definition:
@@ -73,5 +72,4 @@ schemas:
             to: "1"
           - from: "1"
             to: "2"
-        entry_nodes: [ "0" ]
         terminal_node: "2"
