@@ -1,4 +1,6 @@
 from uagents import Agent, Context
+
+from agents.filter import AGENT_TYPE_FILTER
 from .agent_registry import agent_registry
 from .pipeline import pipeline_manager
 from .model.models import (
