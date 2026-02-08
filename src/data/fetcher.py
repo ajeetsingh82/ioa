@@ -18,11 +18,10 @@ def search_web(query: str, max_results: int = 3) -> str:
     logger.debug(f"Performing web search for: '{query}'")
     
     try:
-        # Suppress the noisy output from the ddgs library
-        with open(os.devnull, 'w') as devnull:
-            with contextlib.redirect_stdout(devnull), contextlib.redirect_stderr(devnull):
-                with DDGS() as ddgs:
-                    results = list(ddgs.text(query, max_results=max_results))
+        # The redirection of stdout was causing issues in the multi-threaded environment.
+        # It's safer to let the library log to stdout if it needs to.
+        with DDGS() as ddgs:
+            results = list(ddgs.text(query, max_results=max_results))
         
         if not results:
             logger.debug("No results found from web search.")

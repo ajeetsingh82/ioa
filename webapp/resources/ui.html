@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Agentic RAG Chat</title>
+    <title>Bob</title>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; background-color: #f4f4f4; font-size: 16px; line-height: 1.6; }
@@ -37,7 +37,7 @@
 </head>
 <body>
     <div id="chat-container">
-        <h1>Agentic RAG System</h1>
+        <h1>Bob</h1>
         <div id="messages"></div>
         <div id="input-area">
             <input type="text" id="input-field" placeholder="Ask a question..." autocomplete="off">
@@ -56,12 +56,10 @@
 
             let content = '';
             if (type === 'ai-message') {
-                // Render Markdown for AI messages
-                // We don't prepend "AI Assistant:" inside the bubble for cleaner look,
-                // or we can keep it small. Let's keep it simple.
                 content = marked.parse(text);
+            } else if (type === 'system-message') {
+                content = `<p><em>${text}</em></p>`;
             } else {
-                // For user messages
                 content = `<p>${text}</p>`;
             }
 
@@ -73,23 +71,25 @@
         async function pollForResult(requestId) {
             try {
                 const response = await fetch(`/api/get_status/${requestId}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const data = await response.json();
 
                 if (data.status === 'done') {
                     const thinkingMessage = document.querySelector(`.system-message[data-request-id="${requestId}"]`);
                     if (thinkingMessage) thinkingMessage.remove();
-                    addMessage('AI Assistant', data.text);
+                    addMessage('Bob', data.text);
                 } else if (data.status === 'failed') {
                     const thinkingMessage = document.querySelector(`.system-message[data-request-id="${requestId}"]`);
                     if (thinkingMessage) thinkingMessage.remove();
                     addMessage('System', 'The request failed or timed out.', 'system-message');
                 } else {
-                    // If still pending, poll again
                     setTimeout(() => pollForResult(requestId), 2000);
                 }
             } catch (e) {
                 console.error("Polling error:", e);
-                setTimeout(() => pollForResult(requestId), 2000);
+                addMessage('System', 'disconnected', 'system-message');
             }
         }
 
@@ -106,6 +106,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: query })
                 });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const data = await response.json();
                 const requestId = data.request_id;
 
@@ -119,7 +122,8 @@
                 pollForResult(requestId);
 
             } catch (e) {
-                addMessage('System', 'Error sending query to the server.', 'system-message');
+                console.error("Send message error:", e);
+                addMessage('System', 'disconnected', 'system-message');
             }
         }
 
@@ -130,10 +134,8 @@
             }
         });
 
-        const initialMsg = document.createElement('div');
-        initialMsg.classList.add('system-message');
-        initialMsg.textContent = 'Connected to AI Assistant.';
-        messagesDiv.appendChild(initialMsg);
+        // Initial connection message
+        addMessage('System', 'connected', 'system-message');
     </script>
 </body>
 </html>

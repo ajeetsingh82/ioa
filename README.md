@@ -257,7 +257,11 @@ Next Milestone: Graph-Based Strategic Planner
 docker stop ollama-llm
 docker rm ollama-llm
 docker compose down
+docker compose logs -f
+docker compose logs -f ollama
+docker ps -a       
 ```
 1. Start Docker Services: In your project root, run ```docker compose up --build```. This will start the ollama and webapp containers.
+   - ```docker compose up --build -d```
 2. Start Bureau Locally: In a separate terminal, set up your local Python 3.12 environment and run python app.py.
 3. Access UI: Open your browser to http://localhost:8080.
