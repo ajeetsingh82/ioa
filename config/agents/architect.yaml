@@ -27,6 +27,10 @@ prompts:
       7. Do NOT repeat information.
       8. Maintain logical coherence and readability.
       9. Do NOT add new information.
+      10. If the provided context is unrelated to the user query,
+      11. explicitly state that relevant information was not found.
+      12. Do NOT fabricate.
+      13. Do NOT use loosely related ranked lists.
 
       *** STRATEGY ***
       - Combine related sentences.
