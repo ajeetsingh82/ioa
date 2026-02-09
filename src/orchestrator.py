@@ -107,13 +107,13 @@ class Orchestrator:
         if not graph_manager:
             return
 
-        # Loop to execute all currently available nodes in parallel
         while True:
             next_node = graph_manager.get_next_executable_node()
             if not next_node:
                 break
 
             ctx.logger.info(f"Orchestrator dispatching node '{next_node['id']}' for request: {request_id}")
+            # The 'type' from the YAML plan is a string, which is what get_agent expects
             agent_addr = agent_registry.get_agent(next_node['type'])
             if agent_addr:
                 input_keys = graph_manager.get_inputs_for_node(next_node['id'])
@@ -122,10 +122,9 @@ class Orchestrator:
             else:
                 ctx.logger.warning(f"No agents available for type {next_node['type']} in request: {request_id}")
         
-        # The stall check is now robust because it checks the `running_nodes` set.
-        # It will only trigger if the queue is empty AND no agents are currently processing.
         if graph_manager.has_stalled():
             ctx.logger.error(f"Graph for request {request_id} has stalled. Possible cycle detected.")
+            # The conductor is always registered with the string "conductor"
             await ctx.send(agent_registry.get_agent("conductor"), ReplanRequest(
                 request_id=request_id,
                 reason="Graph execution stalled, possible cycle in plan."

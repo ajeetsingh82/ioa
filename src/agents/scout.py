@@ -1,41 +1,82 @@
 import asyncio
 import json
 from uagents import Context
+from bs4 import BeautifulSoup
+
 from .base import BaseAgent
 from ..model.models import Thought, AgentGoal, AgentGoalType, ThoughtType
-from ..data.fetcher import search_web_ddg
+from ..data.fetcher import search_web_ddg, render_page_deep
 from ..cognition.cognition import shared_memory
 from ..utils.json_parser import SafeJSONParser
 from ..config.store import agent_config_store
+from ..model.agent_types import AgentType
 
 json_parser = SafeJSONParser()
-AGENT_TYPE_SCOUT = "scout"
-depth = 10
+SEARCH_DEPTH = 3
+CHUNK_SIZE = 2000
+CHUNK_OVERLAP = 200
+
 class ScoutAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str = None):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
-        self.type = AGENT_TYPE_SCOUT
+        self.type = AgentType.SCOUT
         
-        config = agent_config_store.get_config(self.type)
+        config = agent_config_store.get_config(self.type.value)
         if not config:
-            raise ValueError(f"Configuration for agent type '{self.type}' not found.")
+            raise ValueError(f"Configuration for agent type '{self.type.value}' not found.")
         self.filter_prompt = config.get_prompt('filter')
         if not self.filter_prompt:
-            raise ValueError("Prompt 'filter' not found for agent type 'retrieve'.")
+            raise ValueError("Prompt 'filter' not found for agent type 'scout'.")
             
         self.on_message(model=AgentGoal)(self.queued_handler(self.process_search_and_filter))
 
-    async def _filter_content(self, query: str, content: str) -> str:
-        """Uses LLM to filter a single piece of content."""
-        prompt = self.filter_prompt.format(query=query, context=content)
+    def _split_text_into_chunks(self, text: str) -> list[str]:
+        """Splits text into overlapping chunks."""
+        if not text:
+            return []
+        chunks = []
+        start = 0
+        while start < len(text):
+            end = start + CHUNK_SIZE
+            chunks.append(text[start:end])
+            start += CHUNK_SIZE - CHUNK_OVERLAP
+        return chunks
+
+    async def _filter_chunk(self, query: str, chunk: str) -> str:
+        """Uses LLM to filter a single chunk of text."""
+        prompt = self.filter_prompt.format(query=query, context=chunk)
         llm_response = await self.think(context="", goal=prompt)
-        
         parsed = json_parser.parse(llm_response)
         return parsed.get("content", "")
 
+    async def _filter_content(self, query: str, html_body: str) -> str:
+        """
+        Extracts clean text, chunks it, and filters each chunk in parallel.
+        """
+        if not html_body:
+            return ""
+            
+        soup = BeautifulSoup(html_body, 'html.parser')
+        clean_text = soup.get_text(separator='\n', strip=True)
+        
+        if not clean_text:
+            return ""
+
+        # 1. Split the clean text into chunks
+        chunks = self._split_text_into_chunks(clean_text)
+        
+        # 2. Create parallel filtering tasks for each chunk
+        filter_tasks = [self._filter_chunk(query, chunk) for chunk in chunks]
+        
+        # 3. Execute filtering in parallel
+        relevant_snippets = await asyncio.gather(*filter_tasks)
+        
+        # 4. Join the relevant snippets into a single block of text
+        return "\n".join(snippet for snippet in relevant_snippets if snippet)
+
     async def process_search_and_filter(self, ctx: Context, sender: str, msg: AgentGoal):
         """
-        Performs a web search, filters the results in parallel, and stores a list of chunks.
+        Performs a web search, deeply renders pages, and filters the content in parallel.
         """
         if msg.type != AgentGoalType.TASK:
             ctx.logger.warning(f"Scout received unknown message type: {msg.type}")
@@ -48,37 +89,33 @@ class ScoutAgent(BaseAgent):
             if not query:
                 raise ValueError("Scout received empty search query.")
 
-            # 1. Fetch multiple web results
-            # The `search_web_ddg` function needs to be defined in fetcher.py to return multiple results
-            search_results = await asyncio.to_thread(search_web_ddg, query, max_results=depth)
-            
-            # 2. Create parallel filtering tasks for each result
+            search_results = await asyncio.to_thread(search_web_ddg, query, max_results=SEARCH_DEPTH)
+            urls = [result['href'] for result in search_results if result.get('href')]
+
+            render_tasks = [render_page_deep(url) for url in urls]
+            rendered_pages = await asyncio.gather(*render_tasks)
+
+            # This now runs the advanced chunking and filtering for each page
             filter_tasks = []
-            for result in search_results:
-                # Assuming result is a dict with a 'body' key containing the page content
-                if result.get('body'):
-                    filter_tasks.append(self._filter_content(query, result['body']))
+            for page_data in rendered_pages:
+                if page_data and page_data.get('body'):
+                    filter_tasks.append(self._filter_content(query, page_data['body']))
             
-            # 3. Execute filtering in parallel
             filtered_chunks = await asyncio.gather(*filter_tasks)
             
-            # Filter out any empty strings from failed extractions
             final_chunks = [chunk for chunk in filtered_chunks if chunk]
             
-            # 4. Store the list of filtered chunks in shared memory
             step_id = msg.metadata.get("step_id")
             impression = "filtered_web_results"
             output_key = f"{msg.request_id}:{step_id}:{impression}"
-            # We need to store the list as a JSON string
             shared_memory.set(output_key, json.dumps(final_chunks))
 
-            # 5. Report completion
             response_metadata = msg.metadata.copy()
             response_metadata["goal_type"] = str(msg.type)
             await ctx.send(sender, Thought(
                 request_id=msg.request_id,
                 type=ThoughtType.RESOLVED,
-                content=f"Scout task completed. Found {len(final_chunks)} relevant chunks.",
+                content=f"Scout task completed. Found {len(final_chunks)} relevant chunks from {len(urls)} sources.",
                 impressions=[output_key],
                 metadata=response_metadata
             ))

@@ -1,6 +1,6 @@
 from uagents import Agent, Context
 
-from .agents.planner import AGENT_TYPE_PLANNER
+from .model.agent_types import AgentType
 from .agent_registry import agent_registry
 from .model.models import (
     AgentRegistration, Thought, AgentGoal, UserQuery, ReplanRequest,
@@ -56,7 +56,6 @@ class ConductorAgent(Agent):
     async def handle_replan_request(self, ctx: Context, sender: str, msg: ReplanRequest):
         """Handles a request from the orchestrator to create a new plan."""
         ctx.logger.warning(f"Received replan request for {msg.request_id} due to: {msg.reason}")
-        # The orchestrator handles cleanup, so we just need to trigger a new plan.
         await self._request_new_plan(ctx, msg.request_id)
 
     async def _request_new_plan(self, ctx: Context, request_id: str):
@@ -66,7 +65,7 @@ class ConductorAgent(Agent):
             ctx.logger.error(f"Cannot re-plan for request {request_id}: Original query not found.")
             return
 
-        planner_address = agent_registry.get_agent(AGENT_TYPE_PLANNER)
+        planner_address = agent_registry.get_agent(AgentType.PLANNER.value)
         if not planner_address:
             ctx.logger.error("Planner agent not found in registry.")
             return
@@ -80,5 +79,5 @@ class ConductorAgent(Agent):
 
     async def _handle_failed_thought(self, ctx: Context, msg: Thought):
         """Handles any failed thought by notifying the orchestrator."""
-        ctx.logger.error(f"Goal failed for request {msg.request_id}. Content: {msg.content}")
+        ctx.logger.error(f"Goal failed for request {request_id}. Content: {msg.content}")
         orchestrator.handle_failure(msg.request_id)

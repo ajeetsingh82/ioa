@@ -276,4 +276,8 @@ curl -X POST http://localhost:8080/api/result \
 "request_id": "some-valid-request-id-from-your-app",
 "type": -1
 }'
+
+url -X POST http://localhost:8011/render \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com"}'
 ```

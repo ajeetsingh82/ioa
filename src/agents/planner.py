@@ -1,30 +1,27 @@
 # The Planner Agent: The "Brain" of the operation.
-import json
-
 import yaml
 from uagents import Context
 from .base import BaseAgent
 from ..model.models import AgentGoal, Thought, AgentGoalType, ThoughtType
 from ..config.store import agent_config_store
 from ..utils.json_parser import SafeJSONParser
+from ..model.agent_types import AgentType
 
 # Instantiate the parser
 json_parser = SafeJSONParser()
 
-AGENT_TYPE_PLANNER = "planner"
-
 class PlannerAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str = None):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
-        self.type = AGENT_TYPE_PLANNER
+        self.type = AgentType.PLANNER
         
         # Load configuration from the central store with an exact match
-        self.config = agent_config_store.get_config(self.type)
+        self.config = agent_config_store.get_config(self.type.value)
         if not self.config:
-            raise ValueError(f"Configuration for agent type '{self.type}' not found.")
+            raise ValueError(f"Configuration for agent type '{self.type.value}' not found.")
 
         if not self.config.get_prompt():
-            raise ValueError(f"Prompt not found for agent type '{self.type}'.")
+            raise ValueError(f"Prompt not found for agent type '{self.type.value}'.")
         
         # Register the handler for planning goals
         self.on_message(model=AgentGoal)(self.queued_handler(self.process_planning_request))

@@ -1,15 +1,44 @@
-from ddgs import DDGS
-import contextlib
+import httpx
 import os
 import logging
-from typing import List, Dict
+from typing import List, Dict, Optional
 
-# Configure logger for the fetcher
+from ddgs import DDGS
+
+# --- Logging Configuration ---
 logger = logging.getLogger("WebFetcher")
+
+# --- WebPerceptor Configuration ---
+WEB_PERCEPTOR_URL = os.getenv("WEB_PERCEPTOR_URL", "http://localhost:8011/render")
+
+async def render_page_deep(url: str, timeout: int = 15000) -> Optional[Dict]:
+    """
+    Calls the WebPerceptor service to deeply render a page and get structured content.
+    """
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                WEB_PERCEPTOR_URL,
+                json={"url": url, "timeout": timeout},
+                timeout=timeout / 1000 + 5  # Add a buffer to the HTTP timeout
+            )
+            response.raise_for_status()
+            logger.info(f"Successfully rendered URL via WebPerceptor: {url}")
+            return response.json()
+    except httpx.RequestError as e:
+        logger.error(f"Failed to connect to WebPerceptor service for URL {url}: {e}")
+        return None
+    except httpx.HTTPStatusError as e:
+        logger.error(f"WebPerceptor service returned error for URL {url}: {e.response.status_code}")
+        return None
+    except Exception as e:
+        logger.error(f"An unexpected error occurred while calling WebPerceptor for {url}: {e}")
+        return None
 
 def search_web_ddg(query: str, max_results: int = 3) -> List[Dict]:
     """
     Performs a web search using DuckDuckGo and returns a list of result dictionaries.
+    Note: The 'body' in these results is from a simple scrape, not deep rendering.
     """
     if not query or not query.strip():
         logger.warning("Web search requested with empty query.")
@@ -19,38 +48,15 @@ def search_web_ddg(query: str, max_results: int = 3) -> List[Dict]:
     
     try:
         with DDGS() as ddgs:
-            # ddgs.text returns a generator, so we convert it to a list
             results = list(ddgs.text(query, max_results=max_results))
         
         if not results:
             logger.info("No results found from DDG web search.")
             return []
             
-        logger.info(f"Retrieved {len(results)} results from DDG.")
+        logger.info(f"Retrieved {len(results)} search results from DDG.")
         return results
 
     except Exception as e:
         logger.error(f"An error occurred during the DDG web search: {e}", exc_info=True)
         return []
-
-def search_web(query: str, max_results: int = 3) -> str:
-    """
-    DEPRECATED: Performs a web search and returns a single concatenated string.
-    Use search_web_ddg for a list of results.
-    """
-    logger.warning("The 'search_web' function is deprecated. Use 'search_web_ddg' instead.")
-    results = search_web_ddg(query, max_results=max_results)
-    
-    if not results:
-        return "No relevant information found from the web search."
-    
-    full_content = ""
-    for i, result in enumerate(results):
-        content = result.get('body', '')
-        if content:
-            full_content += f"--- Result {i+1} from {result.get('href', 'Unknown URL')} ---\n{content}\n\n"
-    
-    if not full_content:
-        return "No readable content could be extracted from the search results."
-        
-    return full_content[:8000]

@@ -54,13 +54,19 @@
             const messageElement = document.createElement('div');
             messageElement.classList.add('message', type);
 
+            let cleanText = text;
+            // Clean up potential LLM artifacts before rendering
+            if (type === 'ai-message') {
+                cleanText = cleanText.replace(/<\|start_header_id\|>assistant<\|end_header_id\|>/g, '').trim();
+            }
+
             let content = '';
             if (type === 'ai-message') {
-                content = marked.parse(text);
+                content = marked.parse(cleanText);
             } else if (type === 'system-message') {
-                content = `<p><em>${text}</em></p>`;
+                content = `<p><em>${cleanText}</em></p>`;
             } else {
-                content = `<p>${text}</p>`;
+                content = `<p>${cleanText}</p>`;
             }
 
             messageElement.innerHTML = content;

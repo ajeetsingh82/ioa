@@ -5,21 +5,20 @@ from uagents import Context
 from .base import BaseAgent
 from ..model.models import Thought, AgentGoal, AgentGoalType, ThoughtType
 from ..config.store import agent_config_store
-
-AGENT_TYPE_COMPUTE = "compute"
+from ..model.agent_types import AgentType
 
 class ProgramOfThoughtAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str = None):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
-        self.type = AGENT_TYPE_COMPUTE
+        self.type = AgentType.COMPUTE
         
         # Load configuration from the central store
-        config = agent_config_store.get_config(self.type)
+        config = agent_config_store.get_config(self.type.value)
         if not config:
-            raise ValueError(f"Configuration for agent type '{self.type}' not found.")
+            raise ValueError(f"Configuration for agent type '{self.type.value}' not found.")
         self.prompt = config.get_prompt('default')
         if not self.prompt:
-            raise ValueError(f"Prompt 'default' not found for agent type '{self.type}'.")
+            raise ValueError(f"Prompt 'default' not found for agent type '{self.type.value}'.")
             
         # Register the handler using the queued_handler wrapper
         self.on_message(model=AgentGoal)(self.queued_handler(self.process_code_execution))

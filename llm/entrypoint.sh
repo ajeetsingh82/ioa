@@ -1,17 +1,27 @@
 #!/bin/sh
 set -e
+MODELS="
+llama3.2:1b
+nomic-embed-text
+"
 
-# Start Ollama server in the background
+# Start Ollama in background
 ollama serve &
-pid=$!
+PID=$!
 
-# Wait for the server to be ready
-echo "Waiting for Ollama server to start..."
-sleep 5
+echo "Waiting for Ollama..."
 
-# Pull the model
-echo "Pulling model: llama3.2:1b"
-ollama pull llama3.2:1b
+until curl -s http://localhost:11434/api/tags > /dev/null 2>&1; do
+  sleep 2
+done
 
-# Bring the server process back to the foreground
-wait $pid
+echo "Ollama ready. Pulling models..."
+
+for MODEL in $MODELS; do
+  ollama pull "$MODEL"
+done
+
+echo "Models pulled."
+
+# Keep server in foreground
+wait $PID
