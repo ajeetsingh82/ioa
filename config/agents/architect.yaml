@@ -1,25 +1,13 @@
 agent_type: synthesize
+
 prompts:
-  - name: default
+
+  - name: extract_relevant_facts
     text: |
-      You are the final answer synthesizer. Your goal is to synthesize the provided summaries into a single, comprehensive, and well-formatted answer to the user's query.
+      You are a relevance-based information extractor.
 
-      USER QUERY:
-      {query}
-
-      FINAL SUMMARIES:
-      {context}
-
-      *** INSTRUCTIONS ***
-      1. Read the user query carefully.
-      2. Synthesize the summaries to directly answer the query.
-      3. If the provided SUMMARIES do not contain enough information, you MUST state that you could not find the information.
-      4. Your final output is a JSON object with a single key: "answer".
-      5. The "answer" value must be PLAIN TEXT.
-
-  - name: summarize_chunk
-    text: |
-      You are an expert information extractor. Your task is to parse a text chunk and extract a concise summary of any information that is directly relevant to the user's original query.
+      Your job is to extract sentences from the provided text chunk
+      that directly help answer the user's query.
 
       USER QUERY:
       {query}
@@ -28,23 +16,79 @@ prompts:
       {context}
 
       *** INSTRUCTIONS ***
-      1. IGNORE any text not relevant to the USER QUERY (e.g., cookie banners, login walls).
-      2. If no relevant information is found, return an empty string.
-      3. Your final output is a JSON object with a single key: "summary".
 
-  - name: meta_summarize
+      1. Extract ONLY sentences that contain information relevant to answering the query.
+      2. Relevance means the sentence includes names, events, explanations,
+         dates, numbers, definitions, or descriptions related to the query.
+      3. Do NOT restrict yourself to headlines or first sentences.
+      4. Do NOT summarize. Extract exact sentences from the text.
+      5. If no relevant information exists, return an empty list.
+      6. Do NOT invent information.
+
+      Output JSON format:
+      {{
+        "facts": [
+          "Exact sentence from the text.",
+          "Another relevant sentence."
+        ]
+      }}
+
+  - name: combine_facts
     text: |
-      You are an expert meta-summarizer. Your goal is to combine several summaries into a single, more concise summary, while preserving all key facts relevant to the user's query.
+      You are an expert fact aggregator.
+
+      Your task is to merge multiple lists of extracted facts into
+      a single, clean, deduplicated list.
 
       USER QUERY:
       {query}
 
-      SUMMARIES TO COMBINE:
+      LISTS OF FACTS:
       {context}
 
       *** INSTRUCTIONS ***
-      1. Read the user query to understand the goal.
-      2. Combine the provided summaries into a single, denser summary.
-      3. Do not lose any critical facts, figures, or names.
-      4. Your final output is a JSON object with a single key: "summary".
+
+      1. Combine all fact lists into one unified list.
+      2. Remove duplicates or near-duplicates.
+      3. Merge overlapping facts into clearer complete statements when appropriate.
+      4. Preserve all names, dates, numbers, and key details.
+      5. Do NOT invent new information.
+      6. If all lists are empty, return an empty list.
+
+      Output JSON format:
+      {{
+        "facts": [
+          "Consolidated fact 1.",
+          "Consolidated fact 2."
+        ]
+      }}
+
+  - name: synthesize_answer
+    text: |
+      You are the final answer synthesizer.
+
+      Your goal is to answer the user's query using ONLY the provided facts.
+
+      USER QUERY:
+      {query}
+
+      CONSOLIDATED FACTS:
+      {context}
+
+      *** INSTRUCTIONS ***
+
+      1. Use supporting context to construct the answer.
+      2. If context partially answer the question, provide a partial answer
+         and clearly state what information is missing.
+      3. If context facts are available, provide meaningful answer or ask exploratory question that can help answer.
+      4. Do NOT invent or assume information.
+      5. Produce a clear, well-structured, plain-text answer.
+      6. Do NOT output markdown.
+      7. Final output must be valid JSON.
+
+      Output JSON format:
+      {{
+        "answer": "Plain text answer here."
+      }}
+
 schemas: []

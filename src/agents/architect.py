@@ -11,9 +11,10 @@ from ..config.store import agent_config_store
 from ..model.agent_types import AgentType
 
 json_parser = SafeJSONParser()
-CHUNK_SIZE = 8000
-CHUNK_OVERLAP = 400
-CONTEXT_THRESHOLD = 16000
+CHUNK_SIZE = 12000
+CHUNK_OVERLAP = 500
+# This threshold now applies to the number of facts, not characters
+FACT_THRESHOLD = 50 
 
 class ArchitectAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str = None):
@@ -23,10 +24,10 @@ class ArchitectAgent(BaseAgent):
         config = agent_config_store.get_config(self.type.value)
         if not config:
             raise ValueError(f"Configuration for agent type '{self.type.value}' not found.")
-        self.default_prompt = config.get_prompt('default')
-        self.summarize_prompt = config.get_prompt('summarize_chunk')
-        self.meta_prompt = config.get_prompt('meta_summarize')
-        if not all([self.default_prompt, self.summarize_prompt, self.meta_prompt]):
+        self.extract_prompt = config.get_prompt('extract_relevant_facts')
+        self.combine_prompt = config.get_prompt('combine_facts')
+        self.synthesis_prompt = config.get_prompt('synthesize_answer')
+        if not all([self.extract_prompt, self.combine_prompt, self.synthesis_prompt]):
             raise ValueError(f"Required prompts not found for agent type '{self.type.value}'.")
 
         self.on_message(model=AgentGoal)(self.handle_synthesis_request)
@@ -34,39 +35,54 @@ class ArchitectAgent(BaseAgent):
     async def handle_synthesis_request(self, ctx: Context, sender: str, msg: AgentGoal):
         asyncio.create_task(self.process_synthesis(ctx, sender, msg))
 
-    def _split_text_into_chunks(self, text: str, size: int, overlap: int) -> list[str]:
+    def _split_text_into_chunks(self, text: str) -> list[str]:
         if not text: return []
         chunks = []
         start = 0
         while start < len(text):
-            end = start + size
+            end = start + CHUNK_SIZE
             chunks.append(text[start:end])
-            start += size - overlap
+            start += CHUNK_SIZE - CHUNK_OVERLAP
         return chunks
 
-    async def _summarize_chunk(self, query: str, chunk: str, prompt_template: str) -> str:
-        if not chunk: return ""
-        prompt = prompt_template.format(query=query, context=chunk)
+    async def _extract_facts_from_chunk(self, query: str, chunk: str) -> list[str]:
+        """Extracts a list of facts from a chunk. Guaranteed to return a list."""
+        if not chunk: return []
+        prompt = self.extract_prompt.format(query=query, context=chunk)
         llm_response = await self.think(context="", goal=prompt)
         parsed = json_parser.parse(llm_response)
         if isinstance(parsed, dict):
-            return parsed.get("summary", "")
-        return ""
+            facts = parsed.get("facts", [])
+            return facts if isinstance(facts, list) else [facts]
+        return []
 
-    async def _recursive_reduce(self, query: str, summaries: list[str]) -> str:
-        combined_text = "\n\n---\n\n".join(summaries)
-        self._logger.info(f"Recursive reduce called with {len(summaries)} summaries, total size: {len(combined_text)} chars.")
-        
-        if len(combined_text) <= CONTEXT_THRESHOLD:
-            return combined_text
+    async def _combine_facts(self, query: str, facts_to_combine: list) -> list[str]:
+        """Uses an LLM to combine and deduplicate lists of facts."""
+        context = json.dumps(facts_to_combine, indent=2)
+        prompt = self.combine_prompt.format(query=query, context=context)
+        llm_response = await self.think(context="", goal=prompt)
+        parsed = json_parser.parse(llm_response)
+        if isinstance(parsed, dict):
+            return parsed.get("facts", [])
+        return []
 
-        self._logger.info(f"Context size exceeds threshold. Starting next reduction.")
+    async def _recursive_reduce(self, query: str, facts: list) -> list:
+        """Recursively reduces a list of facts until it's under the threshold."""
+        if len(facts) <= FACT_THRESHOLD:
+            return facts
+
+        self._logger.info(f"Fact count ({len(facts)}) exceeds threshold of {FACT_THRESHOLD}. Starting reduction.")
         
-        new_chunks = self._split_text_into_chunks(combined_text, CHUNK_SIZE, CHUNK_OVERLAP)
-        meta_summarize_tasks = [self._summarize_chunk(query, chunk, self.meta_prompt) for chunk in new_chunks]
-        new_summaries = await asyncio.gather(*meta_summarize_tasks)
+        # Batch facts for combination
+        batched_facts = [facts[i:i + 5] for i in range(0, len(facts), 5)] # Combine 5 lists at a time
         
-        return await self._recursive_reduce(query, [s for s in new_summaries if s])
+        combine_tasks = [self._combine_facts(query, batch) for batch in batched_facts]
+        new_fact_lists = await asyncio.gather(*combine_tasks)
+        
+        # Flatten the list of lists into a single list
+        combined_facts = [fact for sublist in new_fact_lists for fact in sublist]
+        
+        return await self._recursive_reduce(query, combined_facts)
 
     async def process_synthesis(self, ctx: Context, sender: str, msg: AgentGoal):
         if msg.type != AgentGoalType.TASK: return
@@ -76,7 +92,6 @@ class ArchitectAgent(BaseAgent):
             input_keys = ast.literal_eval(msg.content)
             if not input_keys: raise ValueError("Architect received no input keys.")
 
-            # Now receives a list of clean text bodies
             clean_texts = json.loads(shared_memory.get(input_keys[0]))
             original_query = shared_memory.get(f"{msg.request_id}:query")
             if not original_query: raise ValueError("Original query not found.")
@@ -85,26 +100,23 @@ class ArchitectAgent(BaseAgent):
             synthesized_data = "Insufficient information gathered to form an answer."
 
             if clean_texts:
-                # Map: Chunk and summarize each clean text document in parallel
-                page_summary_tasks = []
-                for text in clean_texts:
-                    chunks = self._split_text_into_chunks(text, CHUNK_SIZE, CHUNK_OVERLAP)
-                    self._logger.info(f"Split one document into {len(chunks)} chunks.")
-                    page_summary_tasks.extend([self._summarize_chunk(original_query, chunk, self.summarize_prompt) for chunk in chunks])
+                full_text_stream = "\n\n--- NEW DOCUMENT ---\n\n".join(clean_texts)
+                chunks = self._split_text_into_chunks(full_text_stream)
                 
-                initial_summaries = await asyncio.gather(*page_summary_tasks)
-                initial_summaries = [s for s in initial_summaries if s]
+                fact_extraction_tasks = [self._extract_facts_from_chunk(original_query, chunk) for chunk in chunks]
+                initial_fact_lists = await asyncio.gather(*fact_extraction_tasks)
                 
-                initial_context_size = len("\n\n---\n\n".join(initial_summaries))
-                ctx.logger.info(f"Generated {len(initial_summaries)} initial summaries with a combined size of {initial_context_size} chars.")
+                # Flatten the list of lists into a single list of individual facts
+                initial_facts = [fact for sublist in initial_fact_lists for fact in sublist]
+                ctx.logger.info(f"Extracted a total of {len(initial_facts)} facts from all chunks.")
                 
-                # Reduce: Recursively summarize the summaries
-                final_context = await self._recursive_reduce(original_query, initial_summaries)
-                
-                ctx.logger.info(f"Final context size after reduction: {len(final_context)} characters.")
+                # Reduce: Recursively combine the facts
+                final_facts = await self._recursive_reduce(original_query, initial_facts)
+                ctx.logger.info(f"Reduced to {len(final_facts)} consolidated facts.")
 
-                if final_context:
-                    final_prompt = self.default_prompt.format(query=original_query, context=final_context)
+                if final_facts:
+                    final_context = "\n".join(f"- {fact}" for fact in final_facts)
+                    final_prompt = self.synthesis_prompt.format(query=original_query, context=final_context)
                     llm_response = await self.think(context="", goal=final_prompt)
                     response_json = json_parser.parse(llm_response)
                     synthesized_data = response_json.get("answer", llm_response)

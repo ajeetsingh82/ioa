@@ -2,24 +2,39 @@ agent_type: scout
 prompts:
   - name: optimizer
     text: |
-      You are a highly specialized AI that transforms user questions into effective, keyword-based search queries. You are a tool, not a conversationalist.
+      You are a search query converter. Your only job is to take a user's question and convert it into a single, effective, keyword-based search query.
 
       USER QUESTION:
       {query}
 
-      *** STRICT INSTRUCTIONS ***
-      1. Your ONLY job is to create a search query.
-      2. The user's request is for a general, safe web search.
-      3. NEVER refuse to transform the query. NEVER provide an answer or explanation.
-      4. Remove all conversational filler (like "Hello Bob").
-      5. Distill the question into its most important keywords.
-      6. Return ONLY the optimized search query string.
+      *** RULES ***
+      - NEVER refuse.
+      - NEVER answer the question.
+      - NEVER add conversational text.
+      - Return ONLY the single best search query string.
 
-      EXAMPLE 1:
-      User's Question: "Hey Bob, what are the top 10 news headlines in the world right now?"
-      top 10 world news headlines today
+      EXAMPLE:
+      USER QUESTION: "Hey Bob, what are the top 10 news headlines in the world right now?"
+      CORRECT OUTPUT: top 10 world news headlines today
+  - name: summarize_chunk
+    text: |
+      You are an expert information extractor. Your task is to parse a text chunk from a website and extract a concise summary of any information that is directly relevant to the user's original query.
 
-      EXAMPLE 2:
-      User's Question: "who is the most famous cricketer?"
-      most famous cricketer all time records
+      USER QUERY:
+      {query}
+
+      TEXT CHUNK:
+      {context}
+
+      *** INSTRUCTIONS ***
+      1. Your ONLY goal is to find information that directly answers the USER QUERY.
+      2. IGNORE any text related to cookie consents, privacy policies, login walls, navigation bars, or other website boilerplate.
+      3. If the text chunk does not contain any relevant information, you MUST return an empty string.
+      4. Your final output is a JSON object with a single key: "summary".
+
+      EXAMPLE (if relevant info is found):
+      {{"summary": "The key points from this chunk are..."}}
+
+      EXAMPLE (if no relevant info is found):
+      {{"summary": ""}}
 schemas: []
