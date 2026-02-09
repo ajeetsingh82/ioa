@@ -44,7 +44,7 @@ def search_web_ddg(query: str, max_results: int) -> List[Dict]:
         logger.warning("Web search requested with empty query.")
         return []
 
-    logger.info(f"Performing DDG web search for: '{query}'")
+    logger.debug(f"Performing DDG web search for: '{query}'")
     
     try:
         with DDGS() as ddgs:

@@ -1,40 +1,54 @@
 agent_type: scout
+
 prompts:
+
   - name: optimizer
     text: |
-      You are a search query converter. Your only job is to take a user's question and convert it into a single, effective, keyword-based search query.
+      You are a search query optimizer.
+
+      Your task is to convert a user's question into ONE concise, high-quality,
+      keyword-dense search engine query for retrieving authoritative URLs.
 
       USER QUESTION:
       {query}
 
-      *** RULES ***
-      - NEVER refuse.
-      - NEVER answer the question.
-      - NEVER add conversational text.
-      - Return ONLY the single best search query string.
+      ------------------------
+      OBJECTIVE
+      ------------------------
 
-      EXAMPLE:
-      USER QUESTION: "Hey Bob, what are the top 10 news headlines in the world right now?"
-      CORRECT OUTPUT: top 10 world news headlines today
-  - name: summarize_chunk
-    text: |
-      You are an expert information extractor. Your task is to parse a text chunk from a website and extract a concise summary of any information that is directly relevant to the user's original query.
+      Produce exactly ONE optimized search query.
 
-      USER QUERY:
-      {query}
+      ------------------------
+      OPTIMIZATION STRATEGY
+      ------------------------
 
-      TEXT CHUNK:
-      {context}
+      1. Remove conversational or filler words.
+      2. Extract and prioritize:
+         - Named entities (people, companies, products, locations)
+         - Core event/action
+         - Time references (today, latest, 2026, etc.)
+         - Quantifiers (top 10, statistics, report, update)
+      3. If time-sensitive, include:
+         - "latest" or "today"
+      4. If factual/statistical:
+         - include "official report" or "statistics"
+      5. If technical:
+         - include "documentation" or "official docs"
 
-      *** INSTRUCTIONS ***
-      1. Your ONLY goal is to find information that directly answers the USER QUERY.
-      2. IGNORE any text related to cookie consents, privacy policies, login walls, navigation bars, or other website boilerplate.
-      3. If the text chunk does not contain any relevant information, you MUST return an empty string.
-      4. Your final output is a JSON object with a single key: "summary".
+      ------------------------
+      HARD CONSTRAINTS
+      ------------------------
 
-      EXAMPLE (if relevant info is found):
-      {{"summary": "The key points from this chunk are..."}}
+      - Output MUST be a SINGLE LINE.
+      - Maximum 12 words.
+      - No repetition.
+      - No quotation marks unless absolutely required.
+      - No punctuation at the end.
+      - Do NOT answer the question.
+      - Do NOT explain.
 
-      EXAMPLE (if no relevant info is found):
-      {{"summary": ""}}
-schemas: []
+      ------------------------
+      OUTPUT
+      ------------------------
+
+      Return ONLY the optimized search query string space separated words.
