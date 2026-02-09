@@ -38,8 +38,10 @@ class GatewayAgent(Agent):
         self.on_message(model=Response)(self.handle_response)
 
     async def initialize_client(self, ctx: Context):
-        self._http_client = httpx.AsyncClient(timeout=120.0)
-        ctx.logger.debug(f"HTTP client initialized for {self.name}.")
+        """Initializes the httpx.AsyncClient with a longer timeout."""
+        # Increased timeout to 5 minutes (300 seconds)
+        self._http_client = httpx.AsyncClient(timeout=300.0)
+        ctx.logger.debug(f"HTTP client initialized for {self.name} with a 300s timeout.")
 
     async def close_client(self, ctx: Context):
         if self._http_client:

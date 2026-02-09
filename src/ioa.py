@@ -79,5 +79,5 @@ class ConductorAgent(Agent):
 
     async def _handle_failed_thought(self, ctx: Context, msg: Thought):
         """Handles any failed thought by notifying the orchestrator."""
-        ctx.logger.error(f"Goal failed for request {request_id}. Content: {msg.content}")
+        ctx.logger.error(f"Goal failed for request {msg.request_id}. Content: {msg.content}")
         orchestrator.handle_failure(msg.request_id)

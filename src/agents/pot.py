@@ -12,7 +12,6 @@ class ProgramOfThoughtAgent(BaseAgent):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
         self.type = AgentType.COMPUTE
         
-        # Load configuration from the central store
         config = agent_config_store.get_config(self.type.value)
         if not config:
             raise ValueError(f"Configuration for agent type '{self.type.value}' not found.")
@@ -20,8 +19,7 @@ class ProgramOfThoughtAgent(BaseAgent):
         if not self.prompt:
             raise ValueError(f"Prompt 'default' not found for agent type '{self.type.value}'.")
             
-        # Register the handler using the queued_handler wrapper
-        self.on_message(model=AgentGoal)(self.queued_handler(self.process_code_execution))
+        self.on_message(model=AgentGoal)(self.process_code_execution)
 
     async def process_code_execution(self, ctx: Context, sender: str, msg: AgentGoal):
         """

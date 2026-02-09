@@ -1,4 +1,3 @@
-# The Planner Agent: The "Brain" of the operation.
 import yaml
 from uagents import Context
 from .base import BaseAgent
@@ -7,7 +6,6 @@ from ..config.store import agent_config_store
 from ..utils.json_parser import SafeJSONParser
 from ..model.agent_types import AgentType
 
-# Instantiate the parser
 json_parser = SafeJSONParser()
 
 class PlannerAgent(BaseAgent):
@@ -15,7 +13,6 @@ class PlannerAgent(BaseAgent):
         super().__init__(name=name, seed=seed, conductor_address=conductor_address)
         self.type = AgentType.PLANNER
         
-        # Load configuration from the central store with an exact match
         self.config = agent_config_store.get_config(self.type.value)
         if not self.config:
             raise ValueError(f"Configuration for agent type '{self.type.value}' not found.")
@@ -23,8 +20,7 @@ class PlannerAgent(BaseAgent):
         if not self.config.get_prompt():
             raise ValueError(f"Prompt not found for agent type '{self.type.value}'.")
         
-        # Register the handler for planning goals
-        self.on_message(model=AgentGoal)(self.queued_handler(self.process_planning_request))
+        self.on_message(model=AgentGoal)(self.process_planning_request)
 
     async def process_planning_request(self, ctx: Context, sender: str, msg: AgentGoal):
         """
@@ -44,11 +40,9 @@ class PlannerAgent(BaseAgent):
 
         plan =  yaml.safe_dump(self.config.get_schema("fixed_plan_json"))
 
-        # Include original goal type in metadata for the Conductor
         response_metadata = msg.metadata.copy()
         response_metadata["goal_type"] = str(msg.type)
 
-        # Send the graph back to the Conductor as a Thought
         await ctx.send(sender, Thought(
             request_id=msg.request_id,
             type=ThoughtType.RESOLVED,

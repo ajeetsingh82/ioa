@@ -1,32 +1,19 @@
 agent_type: scout
 prompts:
-  - name: default
+  - name: optimizer
     text: |
-      You are a search query optimizer. Your task is to refine a user query for better web search results.
+      You are a search query optimizer. Your task is to transform a conversational user query into a concise, keyword-based query suitable for a web search engine.
 
-      User query: '{query}'
+      USER QUERY:
+      {query}
 
-      STRICT OUTPUT PROTOCOL:
-      1. Return ONLY a raw JSON object.
-      2. The object must have a single key "query".
-      3. NO Markdown. NO code fences.
+      *** INSTRUCTIONS ***
+      1. Remove any conversational filler (e.g., "hello bob", "can you tell me").
+      2. Extract the core intent of the query.
+      3. Return ONLY the keyword-based search query as a single, raw string.
+      4. DO NOT add any other text or formatting.
 
-      Example:
-      {{"query": "optimized search query"}}
-  - name: filter
-    text: |
-      You are a web page filter. Your task is to extract the most relevant information from a web page based on a user's query.
-
-      User query: '{query}'
-      Web page content:
-      {context}
-
-      STRICT OUTPUT PROTOCOL:
-      1. Return ONLY a raw JSON object.
-      2. The object must have a single key "content" containing the extracted text.
-      3. If no relevant info is found, the value should be an empty string.
-      4. NO Markdown. NO conversational text.
-
-      Example:
-      {{"content": "The extracted text goes here."}}
+      EXAMPLE:
+      User Query: "Hey Bob, what are the top 5 news headlines in the world right now?"
+      top 5 world news headlines today
 schemas: []
