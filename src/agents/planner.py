@@ -1,4 +1,5 @@
 import yaml
+import asyncio
 from uagents import Context
 from .base import BaseAgent
 from ..model.models import AgentGoal, Thought, AgentGoalType, ThoughtType
@@ -20,7 +21,11 @@ class PlannerAgent(BaseAgent):
         if not self.config.get_prompt():
             raise ValueError(f"Prompt not found for agent type '{self.type.value}'.")
         
-        self.on_message(model=AgentGoal)(self.process_planning_request)
+        self.on_message(model=AgentGoal)(self.handle_planning_request)
+
+    async def handle_planning_request(self, ctx: Context, sender: str, msg: AgentGoal):
+        """Schedules the long-running planning task to run in the background."""
+        asyncio.create_task(self.process_planning_request(ctx, sender, msg))
 
     async def process_planning_request(self, ctx: Context, sender: str, msg: AgentGoal):
         """
@@ -36,7 +41,7 @@ class PlannerAgent(BaseAgent):
             ))
             return
 
-        ctx.logger.debug(f"Planner processing query: '{msg.content}'")
+        ctx.logger.debug(f"Planner background task started for request: {msg.request_id}")
 
         plan =  yaml.safe_dump(self.config.get_schema("fixed_plan_json"))
 

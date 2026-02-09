@@ -2,7 +2,6 @@ import ast
 import json
 import asyncio
 from uagents import Context
-from bs4 import BeautifulSoup
 
 from .base import BaseAgent
 from ..model.models import Thought, AgentGoal, AgentGoalType, ThoughtType
@@ -12,8 +11,9 @@ from ..config.store import agent_config_store
 from ..model.agent_types import AgentType
 
 json_parser = SafeJSONParser()
-CHUNK_SIZE = 2000
-CHUNK_OVERLAP = 200
+CHUNK_SIZE = 8000
+CHUNK_OVERLAP = 400
+CONTEXT_THRESHOLD = 16000
 
 class ArchitectAgent(BaseAgent):
     def __init__(self, name: str, seed: str, conductor_address: str = None):
@@ -25,84 +25,89 @@ class ArchitectAgent(BaseAgent):
             raise ValueError(f"Configuration for agent type '{self.type.value}' not found.")
         self.default_prompt = config.get_prompt('default')
         self.summarize_prompt = config.get_prompt('summarize_chunk')
-        if not self.default_prompt or not self.summarize_prompt:
+        self.meta_prompt = config.get_prompt('meta_summarize')
+        if not all([self.default_prompt, self.summarize_prompt, self.meta_prompt]):
             raise ValueError(f"Required prompts not found for agent type '{self.type.value}'.")
 
-        self.on_message(model=AgentGoal)(self.process_synthesis)
+        self.on_message(model=AgentGoal)(self.handle_synthesis_request)
 
-    def _split_text_into_chunks(self, text: str) -> list[str]:
+    async def handle_synthesis_request(self, ctx: Context, sender: str, msg: AgentGoal):
+        asyncio.create_task(self.process_synthesis(ctx, sender, msg))
+
+    def _split_text_into_chunks(self, text: str, size: int, overlap: int) -> list[str]:
         if not text: return []
         chunks = []
         start = 0
         while start < len(text):
-            end = start + CHUNK_SIZE
+            end = start + size
             chunks.append(text[start:end])
-            start += CHUNK_SIZE - CHUNK_OVERLAP
+            start += size - overlap
         return chunks
 
-    async def _summarize_chunk(self, query: str, chunk: str) -> str:
-        """Filters and summarizes a single chunk of text (Map step)."""
+    async def _summarize_chunk(self, query: str, chunk: str, prompt_template: str) -> str:
         if not chunk: return ""
-        prompt = self.summarize_prompt.format(query=query, context=chunk)
+        prompt = prompt_template.format(query=query, context=chunk)
         llm_response = await self.think(context="", goal=prompt)
         parsed = json_parser.parse(llm_response)
-        return parsed.get("summary", "")
+        if isinstance(parsed, dict):
+            return parsed.get("summary", "")
+        return ""
 
-    async def _process_html_body(self, query: str, html_body: str) -> str:
-        """Extracts text, chunks, and summarizes a single HTML body."""
-        if not html_body: return ""
+    async def _recursive_reduce(self, query: str, summaries: list[str]) -> str:
+        combined_text = "\n\n---\n\n".join(summaries)
+        self._logger.info(f"Recursive reduce called with {len(summaries)} summaries, total size: {len(combined_text)} chars.")
         
-        soup = BeautifulSoup(html_body, 'html.parser')
-        clean_text = soup.get_text(separator='\n', strip=True)
-        if not clean_text: return ""
+        if len(combined_text) <= CONTEXT_THRESHOLD:
+            return combined_text
 
-        chunks = self._split_text_into_chunks(clean_text)
-        summarize_tasks = [self._summarize_chunk(query, chunk) for chunk in chunks]
-        chunk_summaries = await asyncio.gather(*summarize_tasks)
+        self._logger.info(f"Context size exceeds threshold. Starting next reduction.")
         
-        return "\n".join(summary for summary in chunk_summaries if summary)
+        new_chunks = self._split_text_into_chunks(combined_text, CHUNK_SIZE, CHUNK_OVERLAP)
+        meta_summarize_tasks = [self._summarize_chunk(query, chunk, self.meta_prompt) for chunk in new_chunks]
+        new_summaries = await asyncio.gather(*meta_summarize_tasks)
+        
+        return await self._recursive_reduce(query, [s for s in new_summaries if s])
 
     async def process_synthesis(self, ctx: Context, sender: str, msg: AgentGoal):
-        """
-        Performs a full Map-Reduce synthesis from raw HTML bodies.
-        """
-        if msg.type != AgentGoalType.TASK:
-            ctx.logger.warning(f"Architect received unknown message type: {msg.type}")
-            return
+        if msg.type != AgentGoalType.TASK: return
 
-        ctx.logger.info(f"Architect processing synthesis for request: {msg.request_id}")
-
+        ctx.logger.info(f"Architect background task started for request: {msg.request_id}")
         try:
             input_keys = ast.literal_eval(msg.content)
             if not input_keys: raise ValueError("Architect received no input keys.")
 
-            html_bodies_json = shared_memory.get(input_keys[0])
-            html_bodies = json.loads(html_bodies_json)
-            
-            ctx.logger.info(f"Received {len(html_bodies)} HTML documents to process.")
-
+            # Now receives a list of clean text bodies
+            clean_texts = json.loads(shared_memory.get(input_keys[0]))
             original_query = shared_memory.get(f"{msg.request_id}:query")
             if not original_query: raise ValueError("Original query not found.")
 
+            ctx.logger.info(f"Received {len(clean_texts)} clean text documents to process.")
             synthesized_data = "Insufficient information gathered to form an answer."
 
-            if html_bodies:
-                page_summary_tasks = [self._process_html_body(original_query, body) for body in html_bodies]
-                page_summaries = await asyncio.gather(*page_summary_tasks)
+            if clean_texts:
+                # Map: Chunk and summarize each clean text document in parallel
+                page_summary_tasks = []
+                for text in clean_texts:
+                    chunks = self._split_text_into_chunks(text, CHUNK_SIZE, CHUNK_OVERLAP)
+                    self._logger.info(f"Split one document into {len(chunks)} chunks.")
+                    page_summary_tasks.extend([self._summarize_chunk(original_query, chunk, self.summarize_prompt) for chunk in chunks])
                 
-                final_context = "\n\n---\n\n".join(summary for summary in page_summaries if summary)
+                initial_summaries = await asyncio.gather(*page_summary_tasks)
+                initial_summaries = [s for s in initial_summaries if s]
                 
-                ctx.logger.info(f"Total size of summarized context: {len(final_context)} characters.")
+                initial_context_size = len("\n\n---\n\n".join(initial_summaries))
+                ctx.logger.info(f"Generated {len(initial_summaries)} initial summaries with a combined size of {initial_context_size} chars.")
+                
+                # Reduce: Recursively summarize the summaries
+                final_context = await self._recursive_reduce(original_query, initial_summaries)
+                
+                ctx.logger.info(f"Final context size after reduction: {len(final_context)} characters.")
 
                 if final_context:
                     final_prompt = self.default_prompt.format(query=original_query, context=final_context)
                     llm_response = await self.think(context="", goal=final_prompt)
                     response_json = json_parser.parse(llm_response)
-                    
-                    if "answer" in response_json:
-                        synthesized_data = response_json["answer"]
-                    else:
-                        synthesized_data = llm_response
+                    synthesized_data = response_json.get("answer", llm_response)
             
             step_id = msg.metadata.get("step_id")
             impression = "final_answer"

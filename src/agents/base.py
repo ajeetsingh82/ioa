@@ -13,7 +13,6 @@ AGENT_TYPE_BASE = "BASE"
 class BaseAgent(Agent):
     """
     The BaseAgent provides core cognitive abilities and autonomous registration.
-    Message handling is fully asynchronous without an internal queue.
     """
     def __init__(self, name: str, seed: str, port: int = 0, conductor_address: str = None):
         super().__init__(name=name, seed=seed, port=port)
@@ -26,7 +25,6 @@ class BaseAgent(Agent):
         self.on_event("startup")(self.register_on_startup)
 
     async def initialize_client(self, ctx: Context):
-        """Initializes the httpx.AsyncClient with a longer timeout."""
         self._http_client = httpx.AsyncClient(timeout=300.0)
         ctx.logger.debug(f"HTTP client initialized for {self.name} with a 300s timeout.")
 
@@ -45,7 +43,6 @@ class BaseAgent(Agent):
             await ctx.send(self._conductor_address, AgentRegistration(agent_type=agent_type_str))
 
     async def think(self, context: str, goal: str) -> str:
-        """The core cognitive loop, compatible with Ollama's /api/chat."""
         if not self._http_client:
             self._logger.error("HTTP client not initialized.")
             return "Error: HTTP client not available."

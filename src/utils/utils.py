@@ -1,51 +1,65 @@
+import ast
+import json
 import re
-from enum import Enum
-from typing import Type, TypeVar, Optional
-from ..model.agent_types import AgentType
-from ..model.models import AgentGoalType
+from typing import Any, List, Dict
+from bs4 import BeautifulSoup
 
-E = TypeVar("E", bound=Enum)
+def str_to_enum(enum_class, value):
+    """
+    Converts a string to an enum member.
+    Returns None if the value is not a valid member.
+    """
+    try:
+        return enum_class(value)
+    except (ValueError, KeyError):
+        return None
 
-def str_to_enum(
-    enum_cls: Type[E],
-    value: str,
-    *,
-    case_sensitive: bool = False,
-    default: Optional[E] = None
-) -> E:
+def try_extract_text_from_html(html: str) -> str:
     """
-    Converts a string to an enum member, with optional case-insensitivity and a default value.
+    Safely extracts clean text from an HTML string.
+    Returns an empty string if parsing or text extraction fails for any reason.
     """
-    if not isinstance(value, str):
-        raise TypeError(f"Expected string for enum conversion, got {type(value)}")
+    if not html or not isinstance(html, str):
+        return ""
+        
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        clean_text = soup.get_text(separator='\n', strip=True)
+        return clean_text
+    except Exception:
+        # If any error occurs during parsing, return an empty string
+        return ""
+
+def parse_json_string(json_string: str) -> Any:
+    """
+    Safely parses a JSON string that might be enclosed in code fences.
+    """
+    # Remove potential markdown code fences
+    if json_string.startswith("```json"):
+        json_string = json_string[7:]
+    if json_string.endswith("```"):
+        json_string = json_string[:-3]
+    
+    json_string = json_string.strip()
 
     try:
-        if case_sensitive:
-            return enum_cls(value)
+        return json.loads(json_string)
+    except json.JSONDecodeError:
+        # Fallback for simple string responses that are not JSON
+        return {"answer": json_string}
 
-        # case-insensitive match
-        for member in enum_cls:
-            if member.value.lower() == value.lower():
-                return member
-
-        raise ValueError
-
-    except ValueError:
-        if default is not None:
-            return default
-        raise ValueError(
-            f"'{value}' is not a valid {enum_cls.__name__}. "
-            f"Allowed values: {[m.value for m in enum_cls]}"
-        )
-
-def get_goal_type(agent_type: str) -> AgentGoalType:
+def get_thought_impressions(thought_content: str) -> List[str]:
     """
-    Maps an agent's type string to the corresponding AgentGoalType enum member.
+    Parses the 'impressions' list from a Thought's content string.
     """
-    if agent_type == AgentType.SYNTHESIZE.value:
-        return AgentGoalType.SYNTHESYS
-    else:
-        return AgentGoalType.TASK
+    try:
+        # The content is expected to be a string representation of a list
+        impressions = ast.literal_eval(thought_content)
+        if isinstance(impressions, list):
+            return impressions
+        return []
+    except (ValueError, SyntaxError):
+        return []
 
 def clean_gateway_response(text: str) -> str:
     text = re.sub(r"<\|start_header_id\|>.*?<\|end_header_id\|>", "", text, flags=re.S)

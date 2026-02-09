@@ -35,7 +35,7 @@ async def render_page_deep(url: str, timeout: int = 15000) -> Optional[Dict]:
         logger.error(f"An unexpected error occurred while calling WebPerceptor for {url}: {e}")
         return None
 
-def search_web_ddg(query: str, max_results: int = 3) -> List[Dict]:
+def search_web_ddg(query: str, max_results: int) -> List[Dict]:
     """
     Performs a web search using DuckDuckGo and returns a list of result dictionaries.
     Note: The 'body' in these results is from a simple scrape, not deep rendering.
