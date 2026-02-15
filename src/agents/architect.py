@@ -149,59 +149,67 @@ class ArchitectAgent(BaseAgent):
             if not input_keys:
                 raise ValueError("No input keys provided.")
 
+            # The Architect now expects data from RetrieveAgent, which stores data in shared_memory
+            # The key is passed in msg.content (as a list of keys)
+            # RetrieveAgent stores a JSON list of strings (documents)
+            
             raw = shared_memory.get(input_keys[0])
-            clean_texts = json.loads(raw) if raw else []
+            retrieved_texts = json.loads(raw) if raw else []
 
             original_query = shared_memory.get(f"{msg.request_id}:query")
             if not original_query:
                 raise ValueError("Original query missing.")
 
-            if not clean_texts:
-                raise ValueError("No documents found.")
+            if not retrieved_texts:
+                # It's possible RetrieveAgent found nothing, but we should proceed gracefully
+                ctx.logger.warning("No documents found by RetrieveAgent.")
+                synthesized_data = "No relevant information found in the knowledge base."
+            else:
+                full_stream = "\n\n--- NEW DOCUMENT ---\n\n".join(retrieved_texts)
+                chunks = self._split_text_into_chunks(full_stream)
 
-            full_stream = "\n\n--- NEW DOCUMENT ---\n\n".join(clean_texts)
-            chunks = self._split_text_into_chunks(full_stream)
+                running_context = ""
+                seen_chunks = set()
 
-            running_context = ""
-            seen_chunks = set()
+                ctx.logger.info(f"Processing {len(chunks)} chunks.")
 
-            ctx.logger.info(f"Processing {len(chunks)} chunks.")
+                for i, chunk in enumerate(chunks):
+                    ctx.logger.info(f"Processing chunk {i+1}/{len(chunks)} with size {len(chunk)} characters.")
 
-            for i, chunk in enumerate(chunks):
+                    try:
+                        if chunk in seen_chunks:
+                            continue
+                        seen_chunks.add(chunk)
 
-                try:
-                    if chunk in seen_chunks:
-                        continue
-                    seen_chunks.add(chunk)
-
-                    candidate = running_context + "\n\n" + chunk
-
-                    if len(candidate) > CONTEXT_THRESHOLD:
-                        running_context = await self._condense_context(
-                            original_query,
-                            running_context
-                        )
                         candidate = running_context + "\n\n" + chunk
 
-                    if len(candidate) > CONTEXT_THRESHOLD:
-                        candidate = candidate[:CONTEXT_THRESHOLD]
+                        if len(candidate) > CONTEXT_THRESHOLD:
+                            running_context = await self._condense_context(
+                                original_query,
+                                running_context
+                            )
+                            candidate = running_context + "\n\n" + chunk
 
-                    running_context = candidate
+                        if len(candidate) > CONTEXT_THRESHOLD:
+                            candidate = candidate[:CONTEXT_THRESHOLD]
 
-                except Exception as chunk_error:
-                    ctx.logger.warning(
-                        f"Chunk {i} failed, continuing. Error: {chunk_error}"
+                        running_context = candidate
+
+                    except Exception as chunk_error:
+                        ctx.logger.warning(
+                            f"Chunk {i} failed, continuing. Error: {chunk_error}"
+                        )
+                        continue
+
+                # Final guard
+                if len(running_context) > CONTEXT_THRESHOLD:
+                    running_context = await self._condense_context(
+                        original_query,
+                        running_context
                     )
-                    continue
 
-            # Final guard
-            if len(running_context) > CONTEXT_THRESHOLD:
-                running_context = await self._condense_context(
-                    original_query,
-                    running_context
-                )
-
-            synthesized_data = running_context.strip()
+                synthesized_data = running_context.strip()
+                ctx.logger.info(f"Final synthesized context size: {len(synthesized_data)} characters.")
 
         except Exception as e:
             ctx.logger.error(f"Architect partial failure: {e}")

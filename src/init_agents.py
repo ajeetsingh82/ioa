@@ -3,9 +3,9 @@ from uagents import Agent
 from .ioa import ConductorAgent
 from .agents.gateway import gateway
 from .agents.planner import PlannerAgent
-from .agents.scout import ScoutAgent
 from .agents.architect import ArchitectAgent
 from .agents.pot import ProgramOfThoughtAgent
+from .agents.retrieve import RetrieveAgent
 
 # ============================================================
 # Agent Initialization
@@ -23,11 +23,6 @@ def init_agents() -> list[Agent]:
         seed="planner_seed",
     )
 
-    scout = ScoutAgent(
-        name="scout",
-        seed="scout_seed",
-    )
-
     architect = ArchitectAgent(
         name="architect",
         seed="architect_seed",
@@ -38,5 +33,10 @@ def init_agents() -> list[Agent]:
         seed="program_of_thought_seed",
     )
 
+    retrieve = RetrieveAgent(
+        name="retrieve",
+        seed="retrieve_seed",
+    )
+
     # The gateway is also included for completeness, though it's a global instance.
-    return [conductor, gateway, planner, scout, architect, program_of_thought]
+    return [conductor, gateway, planner, architect, program_of_thought, retrieve]

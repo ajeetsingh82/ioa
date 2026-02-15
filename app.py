@@ -55,7 +55,7 @@ if __name__ == "__main__":
     agents = init_agents()
 
     # Create Bureau and add all agents in a loop
-    bureau = Bureau(port=8000)
+    bureau = Bureau(port=8021)
     for agent in agents:
         bureau.add(agent)
 

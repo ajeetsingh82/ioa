@@ -1,19 +1,26 @@
-import httpx
 import os
+import httpx
 import logging
-from typing import List, Dict, Optional
+from typing import Optional, List
+from pydantic import BaseModel
 
-from ddgs import DDGS
+from ..utils.utils import extract_links
 
-# --- Logging Configuration ---
-logger = logging.getLogger("WebFetcher")
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
 # --- WebPerceptor Configuration ---
 WEB_PERCEPTOR_URL = os.getenv("WEB_PERCEPTOR_URL", "http://localhost:8011/render")
 
-async def render_page_deep(url: str, timeout: int = 15000) -> Optional[Dict]:
+class RenderResponse(BaseModel):
+    url: str
+    body: str
+    hrefs: List[str]
+
+async def render_page_deep(url: str, timeout: int = 15000) -> Optional[RenderResponse]:
     """
-    Calls the WebPerceptor service to deeply render a page and get structured content.
+    Calls the WebPerceptor service to deeply render a page.
+    Returns a RenderResponse object containing the URL, body HTML, and extracted links.
     """
     try:
         async with httpx.AsyncClient() as client:
@@ -23,8 +30,24 @@ async def render_page_deep(url: str, timeout: int = 15000) -> Optional[Dict]:
                 timeout=timeout / 1000 + 5  # Add a buffer to the HTTP timeout
             )
             response.raise_for_status()
+            data = response.json()
+            
+            body_html = data.get("body", "")
+            
+            # If the service returns hrefs, use them. Otherwise, extract them here.
+            hrefs = data.get("hrefs")
+            if hrefs is None:
+                # Extract links from the body if not provided by the service
+                hrefs = list(extract_links(body_html, url))
+            
             logger.info(f"Successfully rendered URL via WebPerceptor: {url}")
-            return response.json()
+            
+            return RenderResponse(
+                url=data.get("url", url),
+                body=body_html,
+                hrefs=hrefs
+            )
+
     except httpx.RequestError as e:
         logger.error(f"Failed to connect to WebPerceptor service for URL {url}: {e}")
         return None
@@ -34,29 +57,3 @@ async def render_page_deep(url: str, timeout: int = 15000) -> Optional[Dict]:
     except Exception as e:
         logger.error(f"An unexpected error occurred while calling WebPerceptor for {url}: {e}")
         return None
-
-def search_web_ddg(query: str, max_results: int) -> List[Dict]:
-    """
-    Performs a web search using DuckDuckGo and returns a list of result dictionaries.
-    Note: The 'body' in these results is from a simple scrape, not deep rendering.
-    """
-    if not query or not query.strip():
-        logger.warning("Web search requested with empty query.")
-        return []
-
-    logger.debug(f"Performing DDG web search for: '{query}'")
-    
-    try:
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
-        
-        if not results:
-            logger.info("No results found from DDG web search.")
-            return []
-            
-        logger.info(f"Retrieved {len(results)} search results from DDG.")
-        return results
-
-    except Exception as e:
-        logger.error(f"An error occurred during the DDG web search: {e}", exc_info=True)
-        return []

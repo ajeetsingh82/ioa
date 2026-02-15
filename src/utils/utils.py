@@ -1,7 +1,9 @@
 import ast
 import json
 import re
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Set
+from urllib.parse import urlparse, urljoin
+
 from bs4 import BeautifulSoup
 
 def str_to_enum(enum_class, value):
@@ -65,3 +67,30 @@ def clean_gateway_response(text: str) -> str:
     text = re.sub(r"<\|start_header_id\|>.*?<\|end_header_id\|>", "", text, flags=re.S)
     text = re.sub(r"<\|.*?\|>", "", text)
     return text.strip()
+
+def extract_links(html: str, base_url: str) -> Set[str]:
+    """
+    Extracts and normalizes all links from an HTML string.
+    Returns a set of absolute URLs.
+    """
+    if not html or not isinstance(html, str):
+        return set()
+
+    links = set()
+    try:
+        soup = BeautifulSoup(html, "html.parser")
+        for a_tag in soup.find_all("a", href=True):
+            href = a_tag["href"]
+            # Normalize and join with base URL
+            full_url = urljoin(base_url, href)
+
+            # Basic validation: only keep http/https
+            parsed = urlparse(full_url)
+            if parsed.scheme in ["http", "https"]:
+                # Remove fragment identifier
+                clean_url = full_url.split("#")[0]
+                links.add(clean_url)
+    except Exception:
+        pass
+
+    return links

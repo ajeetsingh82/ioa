@@ -10,9 +10,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 
 class LedgerNamespace(str, Enum):
-    CRAWLING = "crawled"
     SESSIONS = "sessions"
-    CRAWL_QUEUE = "crawl_queue"
 
 
 class LedgerError(Exception):
