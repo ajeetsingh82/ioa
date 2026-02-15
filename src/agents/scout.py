@@ -60,7 +60,7 @@ class ScoutAgent(BaseAgent):
                     if clean_text and len(clean_text) > 0:
                         ctx.logger.info(f"Extracted {len(clean_text)} clean text document.")
                         clean_texts.append(clean_text)
-            
+
             total_chars = sum(len(text) for text in clean_texts)
             ctx.logger.info(f"Extracted {len(clean_texts)} clean text documents with a total of {total_chars} characters.")
 

@@ -1,3 +1,4 @@
+pydantic
 uagents
 fastapi[all]
 uvicorn[standard]
@@ -6,3 +7,5 @@ ddgs
 protobuf==4.23.4
 httpx
 PyYAML
+chromadb
+redis

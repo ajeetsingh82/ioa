@@ -259,7 +259,11 @@ docker rm ollama-llm
 docker compose down
 docker compose logs -f
 docker compose logs -f ollama
-docker ps -a       
+docker ps -a      
+docker logs ollama-llm -f 
+docker logs  webcrawler -f
+ docker compose stop webcrawler
+docker compose up -d --build webcrawler 
 ```
 1. Start Docker Services: In your project root, run ```docker compose up --build```. This will start the ollama and webapp containers.
    - ```docker compose up --build -d```
@@ -280,4 +284,12 @@ curl -X POST http://localhost:8080/api/result \
 url -X POST http://localhost:8011/render \
   -H "Content-Type: application/json" \
   -d '{"url":"https://example.com"}'
+  
+curl -X POST "http://localhost:8002/crawl" \
+     -H "Content-Type: application/json" \
+     -d '{
+           "urls": ["https://www.wikipedia.org/", "https://timesofindia.indiatimes.com/"],
+           "freshness_window": 3600
+         }'
 ```
+

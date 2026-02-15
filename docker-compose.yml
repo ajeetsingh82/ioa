@@ -35,5 +35,47 @@ services:
       - "8011:8011"
     restart: unless-stopped
 
+  # ChromaDB Vector Database
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma-data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
+    restart: unless-stopped
+
+  # Redis for Ledger and Shared Memory
+  redis:
+    image: redis:latest
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+  # Web Crawler Service
+  webcrawler:
+    build:
+      context: ./webcrawler
+      dockerfile: Dockerfile
+    container_name: webcrawler
+    ports:
+      - "8002:8002"
+    environment:
+      - CHROMA_URL=http://chromadb:8000
+      - REDIS_HOST=redis
+      - OLLAMA_BASE_URL=http://ollama:11434 # For embedding function
+    restart: unless-stopped
+    depends_on:
+      - chromadb
+      - redis
+      - ollama
+
 volumes:
   ollama-data:
+  chroma-data:
+  redis-data:
