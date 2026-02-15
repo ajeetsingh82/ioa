@@ -30,6 +30,15 @@ async def crawl_endpoint(request: CrawlRequest):
     """
     Accepts a list of URLs and adds them to the crawl queue.
     Returns immediately with a confirmation.
+
+    Example:
+    ```bash
+    curl -X POST "http://localhost:8002/crawl" \
+         -H "Content-Type: application/json" \
+         -d '{
+               "urls": ["https://www.wikipedia.org/", "https://timesofindia.indiatimes.com/"]
+             }'
+    ```
     """
     if not request.urls:
         raise HTTPException(status_code=400, detail="No URLs provided.")
@@ -41,4 +50,39 @@ async def crawl_endpoint(request: CrawlRequest):
         return {"status": "queued", "count": num_added}
     except Exception as e:
         logger.exception("Failed to queue URLs for crawling.")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/clear-queue")
+async def clear_queue_endpoint():
+    """
+    Clears the pending crawl queue.
+
+    Example:
+    ```bash
+    curl -X POST "http://localhost:8002/clear-queue"
+    ```
+    """
+    try:
+        ledger.delete(LedgerNamespace.CRAWL_QUEUE)
+        logger.info("Cleared crawl queue.")
+        return {"status": "cleared"}
+    except Exception as e:
+        logger.exception("Failed to clear crawl queue.")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/queue-size")
+async def queue_size_endpoint():
+    """
+    Returns the current number of items in the crawl queue.
+
+    Example:
+    ```bash
+    curl -X GET "http://localhost:8002/queue-size"
+    ```
+    """
+    try:
+        size = ledger.llen(LedgerNamespace.CRAWL_QUEUE)
+        return {"queue_size": size}
+    except Exception as e:
+        logger.exception("Failed to get queue size.")
         raise HTTPException(status_code=500, detail=str(e))

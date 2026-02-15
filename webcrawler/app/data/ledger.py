@@ -11,6 +11,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 class LedgerNamespace(str, Enum):
     CRAWLING = "crawled"
+    SESSIONS = "sessions"
     CRAWL_QUEUE = "crawl_queue"
 
 
@@ -104,6 +105,26 @@ class Ledger:
             return self.client.brpop(queue_names, timeout)
         except redis.RedisError as e:
             logger.exception(f"Ledger BRPOP failed for {queue_names}")
+            raise LedgerError(str(e))
+
+    def llen(self, queue_name: str) -> int:
+        """Returns the length of a list (queue)."""
+        try:
+            return self.client.llen(queue_name)
+        except redis.RedisError as e:
+            logger.exception(f"Ledger LLEN failed for {queue_name}")
+            raise LedgerError(str(e))
+
+    # ------------------------------------------
+    # General Key Operations
+    # ------------------------------------------
+
+    def delete(self, key: str) -> int:
+        """Deletes a key."""
+        try:
+            return self.client.delete(key)
+        except redis.RedisError as e:
+            logger.exception(f"Ledger DELETE failed for {key}")
             raise LedgerError(str(e))
 
     # ------------------------------------------
