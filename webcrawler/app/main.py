@@ -18,12 +18,12 @@ class CrawlRequest(BaseModel):
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting crawler worker...")
-    await crawler_service.start_worker()
+    await crawler_service.start()
 
 @app.on_event("shutdown")
 async def shutdown_event():
     logger.info("Shutting down crawler service...")
-    await crawler_service.close()
+    await crawler_service.stop()
 
 @app.post("/crawl")
 async def crawl_endpoint(request: CrawlRequest):

@@ -111,13 +111,13 @@ pip install uagents
 
 # Running the System
 
-## Terminal 1 --- Start Web UI
+## Terminal 1
 
 ``` bash
-python webapp.py
+docker compose up --build -d
+# Runs on: http://127.0.0.1:8080/
 ```
 
-Runs on: http://127.0.0.1:8080/
 
 ## Terminal 2 --- Start Agent Bureau
 
@@ -139,10 +139,9 @@ Expected logs:
 2.  Web UI forwards request to Gateway HTTP
 3.  Gateway sends UserQuery to Strategist
 4.  Strategist returns structured JSON tasks
-5.  Conductor schedules Scout/Filter agents
-6.  Architect synthesizes structured result
-7.  User Proxy formats final Markdown
-8.  Web UI renders Markdown
+5. Architect synthesizes structured result
+6. User Proxy formats final Markdown
+7. Web UI renders Markdown
 
 ------------------------------------------------------------------------
 
@@ -193,19 +192,6 @@ Replace the linear pipeline with a dynamic reasoning graph.
 -   Weight = Confidence score toward goal
 -   Goal = Maximize answer reliability
 
-## Planned Algorithm
-
-1.  Strategist creates initial reasoning graph
-2.  Use a priority queue (Dijkstra-style traversal)
-3.  Execute next node with highest expected confidence gain
-4.  After each Scout + Filter pair:
-    -   Update strategy context
-    -   Recompute branch confidence
-5.  Expand best-performing branch
-6.  Terminate when:
-    -   Confidence threshold is reached
-    -   Or execution budget is exhausted
-
 ------------------------------------------------------------------------
 
 # Future Improvements
@@ -228,7 +214,6 @@ This system demonstrates:
 -   Structured JSON orchestration
 -   Markdown-only final contract
 -   No vector database dependency
--   Search-driven contextual reasoning
 
 It is not a wrapper framework.\
 It is a controllable cognitive pipeline.
