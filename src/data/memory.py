@@ -68,6 +68,7 @@ class Memory:
             self.client = chromadb.HttpClient(
                 host=self._extract_host(self.chroma_url),
                 port=self._extract_port(self.chroma_url),
+                settings=chromadb.config.Settings(anonymized_telemetry=False)
             )
         except Exception as e:
             raise MemoryError(f"Failed to connect to ChromaDB at {self.chroma_url}: {e}")

@@ -59,7 +59,8 @@ class RetrieveAgent(BaseAgent):
 
             retrieved_texts = [res['document'] for res in results if res.get('document')]
 
-            ctx.logger.info(f"Retrieved {len(retrieved_texts)} documents from memory.")
+            total_size = sum(len(text) for text in retrieved_texts)
+            ctx.logger.info(f"Retrieved {len(retrieved_texts)} documents from memory. Total size: {total_size} characters.")
 
             step_id = msg.metadata.get("step_id")
             impression = "retrieved_context"

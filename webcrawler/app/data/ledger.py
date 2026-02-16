@@ -6,8 +6,12 @@ from typing import Optional, Any, Dict, List
 from enum import Enum
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
+
+# ============================================================
+# Namespaces
+# ============================================================
 
 class LedgerNamespace(str, Enum):
     CRAWLING = "crawled"
@@ -19,10 +23,27 @@ class LedgerError(Exception):
     pass
 
 
+# ============================================================
+# Ledger
+# ============================================================
+
 class Ledger:
     """
-    Production-grade Redis DAO (Hash optimized).
+    Production-grade Redis abstraction.
+
+    Supports:
+      - Structured namespaced hashes
+      - Raw hash operations
+      - Sets
+      - Lists (queues)
+      - Strings
+      - Atomic counters
+      - Locks
     """
+
+    # ============================================================
+    # INIT
+    # ============================================================
 
     def __init__(
             self,
@@ -48,23 +69,30 @@ class Ledger:
         except redis.ConnectionError as e:
             raise LedgerError(f"Redis connection failed: {e}")
 
-    # ------------------------------------------
-    # Hash Operations
-    # ------------------------------------------
+    # ============================================================
+    # INTERNAL
+    # ============================================================
+
+    def _ns(self, namespace: str, key: str) -> str:
+        return f"{namespace}:{key}"
+
+    # ============================================================
+    # STRUCTURED HASH (Namespaced)
+    # ============================================================
 
     def hset(
             self,
             namespace: str,
             key: str,
             field: str,
-            value: Dict,
-    ) -> None:
+            value: Any,
+            json_encode: bool = True,
+    ):
         try:
-            self.client.hset(
-                f"{namespace}:{key}",
-                field,
-                json.dumps(value),
-            )
+            redis_key = self._ns(namespace, key)
+            if json_encode:
+                value = json.dumps(value)
+            self.client.hset(redis_key, field, value)
         except redis.RedisError as e:
             raise LedgerError(str(e))
 
@@ -73,73 +101,153 @@ class Ledger:
             namespace: str,
             key: str,
             field: str,
-    ) -> Optional[Dict]:
+            json_decode: bool = True,
+    ) -> Optional[Any]:
         try:
-            value = self.client.hget(f"{namespace}:{key}", field)
-            return json.loads(value) if value else None
+            redis_key = self._ns(namespace, key)
+            value = self.client.hget(redis_key, field)
+
+            if value is None:
+                return None
+
+            if json_decode:
+                return json.loads(value)
+
+            return value
+        except redis.RedisError as e:
+            raise LedgerError(str(e))
+
+    def hgetall(
+            self,
+            namespace: str,
+            key: str,
+            json_decode: bool = True,
+    ) -> Dict[str, Any]:
+        try:
+            redis_key = self._ns(namespace, key)
+            data = self.client.hgetall(redis_key)
+
+            if json_decode:
+                return {
+                    k: json.loads(v)
+                    for k, v in data.items()
+                }
+
+            return data
         except redis.RedisError as e:
             raise LedgerError(str(e))
 
     def hexists(self, namespace: str, key: str, field: str) -> bool:
-        return self.client.hexists(f"{namespace}:{key}", field)
+        return self.client.hexists(self._ns(namespace, key), field)
 
-    def hdel(self, namespace: str, key: str, field: str) -> None:
-        self.client.hdel(f"{namespace}:{key}", field)
+    def hdel(self, namespace: str, key: str, *fields: str):
+        self.client.hdel(self._ns(namespace, key), *fields)
 
-    # ------------------------------------------
-    # List (Queue) Operations
-    # ------------------------------------------
+    # ============================================================
+    # RAW HASH OPERATIONS (For refcounting etc.)
+    # ============================================================
 
-    def lpush(self, queue_name: str, *values: Any) -> int:
-        """Pushes values onto the left side of a list (queue)."""
+    def hincrby(self, key: str, field: str, amount: int) -> int:
         try:
-            return self.client.lpush(queue_name, *values)
+            return self.client.hincrby(key, field, amount)
         except redis.RedisError as e:
-            logger.exception(f"Ledger LPUSH failed for {queue_name}")
             raise LedgerError(str(e))
 
-    def brpop(self, queue_names: List[str], timeout: int = 0) -> Optional[tuple]:
-        """Blocking right-pop from a list (queue). Waits for an item to be available."""
+    def hdel_raw(self, key: str, *fields: str):
         try:
-            # Returns a tuple (queue_name, value) or None
-            return self.client.brpop(queue_names, timeout)
+            return self.client.hdel(key, *fields)
         except redis.RedisError as e:
-            logger.exception(f"Ledger BRPOP failed for {queue_names}")
             raise LedgerError(str(e))
 
-    def llen(self, queue_name: str) -> int:
-        """Returns the length of a list (queue)."""
+    # ============================================================
+    # SET OPERATIONS
+    # ============================================================
+
+    def sadd(self, key: str, *values: Any) -> int:
         try:
-            return self.client.llen(queue_name)
+            return self.client.sadd(key, *values)
         except redis.RedisError as e:
-            logger.exception(f"Ledger LLEN failed for {queue_name}")
             raise LedgerError(str(e))
 
-    # ------------------------------------------
-    # General Key Operations
-    # ------------------------------------------
-
-    def delete(self, key: str) -> int:
-        """Deletes a key."""
+    def sismember(self, key: str, value: Any) -> bool:
         try:
-            return self.client.delete(key)
+            return self.client.sismember(key, value)
         except redis.RedisError as e:
-            logger.exception(f"Ledger DELETE failed for {key}")
             raise LedgerError(str(e))
 
-    # ------------------------------------------
-    # Atomic Lock (SETNX)
-    # ------------------------------------------
+    def smembers(self, key: str) -> set:
+        try:
+            return self.client.smembers(key)
+        except redis.RedisError as e:
+            raise LedgerError(str(e))
+
+    def srem(self, key: str, *values: Any) -> int:
+        try:
+            return self.client.srem(key, *values)
+        except redis.RedisError as e:
+            raise LedgerError(str(e))
+
+    # ============================================================
+    # LIST (QUEUE)
+    # ============================================================
+
+    def lpush(self, key: str, *values: Any) -> int:
+        try:
+            return self.client.lpush(key, *values)
+        except redis.RedisError as e:
+            raise LedgerError(str(e))
+
+    def brpop(self, keys: List[str], timeout: int = 0):
+        try:
+            return self.client.brpop(keys, timeout)
+        except redis.RedisError as e:
+            raise LedgerError(str(e))
+
+    def llen(self, key: str) -> int:
+        return self.client.llen(key)
+
+    # ============================================================
+    # STRING
+    # ============================================================
+
+    def set(self, key: str, value: Any, nx: bool = False, ex: int = None):
+        try:
+            return self.client.set(key, value, nx=nx, ex=ex)
+        except redis.RedisError as e:
+            raise LedgerError(str(e))
+
+    def get(self, key: str) -> Optional[str]:
+        try:
+            return self.client.get(key)
+        except redis.RedisError as e:
+            raise LedgerError(str(e))
+
+    # ============================================================
+    # GENERAL
+    # ============================================================
+
+    def delete(self, *keys: str) -> int:
+        try:
+            return self.client.delete(*keys)
+        except redis.RedisError as e:
+            raise LedgerError(str(e))
+
+    def exists(self, key: str) -> bool:
+        return self.client.exists(key) > 0
+
+    # ============================================================
+    # LOCKS
+    # ============================================================
 
     def acquire_lock(self, lock_key: str, ttl: int = 60) -> bool:
-        """
-        Atomic lock using SET NX.
-        Prevents duplicate crawling.
-        """
-        return self.client.set(lock_key, "1", nx=True, ex=ttl)
+        return self.set(lock_key, "1", nx=True, ex=ttl)
 
     def release_lock(self, lock_key: str):
-        self.client.delete(lock_key)
+        self.delete(lock_key)
+
+    # ============================================================
+    # HEALTH
+    # ============================================================
 
     def health_check(self) -> bool:
         try:

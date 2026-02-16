@@ -39,7 +39,7 @@ class Memory:
             batch_size: Optional[int] = None,
     ):
 
-        self.chroma_url = chroma_url or os.getenv("CHROMA_URL", "http://localhost:8000")
+        self.chroma_url = chroma_url or os.getenv("CHROMA_URL", "http://chromadb:8000")
         self.batch_size = batch_size or int(os.getenv("CHROMA_BATCH_SIZE", "500"))
 
         # ----------------------------------

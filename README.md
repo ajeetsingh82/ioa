@@ -254,6 +254,12 @@ Next Milestone: Graph-Based Strategic Planner
 
 ------------------------------------------------------------------------
 ```
+docker system df -v
+# rmoves mount
+docker-compose down -v
+docker rm <redis-container-name>
+docker volume ls
+docker volume prune
 docker stop ollama-llm
 docker rm ollama-llm
 docker compose down
@@ -288,8 +294,15 @@ url -X POST http://localhost:8011/render \
 curl -X POST "http://localhost:8002/crawl" \
      -H "Content-Type: application/json" \
      -d '{
-           "urls": ["https://www.wikipedia.org/", "https://timesofindia.indiatimes.com/"],
+           "urls": ["https://timesofindia.indiatimes.com/"],
            "freshness_window": 3600
          }'
+# "urls": ["https://www.wikipedia.org/", "https://timesofindia.indiatimes.com/"],
+```
+
+```
+import chromadb
+client = chromadb.HttpClient(host="localhost", port=8000)
+print(client.list_collections())
 ```
 
